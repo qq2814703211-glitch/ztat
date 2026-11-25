@@ -224,8 +224,9 @@ class Dashboard: NSStackView {
         super.init(frame: NSRect.zero)
         
         let scrollView = ScrollableStackView(orientation: .vertical)
+        // ZTAT-PATCH: Add top margin when hosted beneath ztat Unified Settings header bar.
         scrollView.stackView.edgeInsets = NSEdgeInsets(
-            top: 0,
+            top: Constants.Settings.margin,
             left: Constants.Settings.margin,
             bottom: Constants.Settings.margin,
             right: Constants.Settings.margin

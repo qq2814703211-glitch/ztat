@@ -42,6 +42,26 @@ public enum ZtatSettingsSection: String, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+/// Fine-grained deep-link route into ztat's single unified Settings window.
+/// Eliminates all separate upstream Settings windows by targeting exact sub-pages directly.
+public enum ZtatSettingsRoute: Equatable, Hashable, Sendable {
+    case general
+    case powerGuard
+    case statusTrio(sectionID: String? = nil)
+    case stats(target: String? = nil)
+    case toolbox(itemID: String? = nil)
+
+    public init(section: ZtatSettingsSection) {
+        switch section {
+        case .general: self = .general
+        case .powerGuard: self = .powerGuard
+        case .statusTrio: self = .statusTrio(sectionID: nil)
+        case .stats: self = .stats(target: nil)
+        case .toolbox: self = .toolbox(itemID: nil)
+        }
+    }
+}
+
 public extension Notification.Name {
     static let ztatOpenHubTab = Notification.Name("dev.ztat.openHubTab")
     static let ztatOpenSettings = Notification.Name("dev.ztat.openSettings")

@@ -3,29 +3,41 @@
 //  StatsSettingsContainerView.swift
 //  ZtatStatsHost
 //
-//  Settings view hosted inside ztat's unified Settings window "性能监控" section.
+//  ZTAT-PATCH: Native SwiftUI overview + embedded Stats module/dashboard/settings host
+//  inside ztat's single Unified Settings window (eliminates standalone Stats SettingsWindow).
 //
 
+import AppKit
 import StatsKit
 import SwiftUI
 import ZtatCore
 
-/// Settings view hosted inside ztat's unified Settings window "性能监控" section.
+/// Overview & global toggles view hosted inside ztat's unified Settings window ("性能监控 → 总览与开关").
 @MainActor
 public struct StatsSettingsContainerView: View {
     @ObservedObject private var host: ZtatStatsHost
+    private let onSelectTarget: ((String) -> Void)?
     @State private var temperatureUnit: String
     @State private var keepMenuBarPosition: Bool
     @State private var showResetConfirmation: Bool = false
 
-    public init(host: ZtatStatsHost) {
+    public init(host: ZtatStatsHost, onSelectTarget: ((String) -> Void)? = nil) {
         self.host = host
+        self.onSelectTarget = onSelectTarget
         _temperatureUnit = State(initialValue: Store.shared.string(key: "temperature_units", defaultValue: "system"))
         _keepMenuBarPosition = State(initialValue: Store.shared.bool(key: "keep_menubar_positions", defaultValue: false))
     }
 
-    public init() {
-        self.init(host: .shared)
+    public init(onSelectTarget: ((String) -> Void)? = nil) {
+        self.init(host: .shared, onSelectTarget: onSelectTarget)
+    }
+
+    private func navigate(to target: String) {
+        if let onSelectTarget {
+            onSelectTarget(target)
+        } else {
+            self.host.openNativeStatsSettings(selecting: target)
+        }
     }
 
     public var body: some View {
@@ -46,14 +58,19 @@ public struct StatsSettingsContainerView: View {
 
                     Spacer()
 
-                    Button(ZtatL10n.tr("高级组件设置…", "Advanced Widget Settings…")) {
-                        self.host.openNativeStatsSettings()
+                    Button(ZtatL10n.tr("设备概览", "Dashboard")) {
+                        self.navigate(to: "dashboard")
+                    }
+                    .controlSize(.regular)
+
+                    Button(ZtatL10n.tr("全局与压测", "Global & Stress")) {
+                        self.navigate(to: "settings")
                     }
                     .controlSize(.regular)
                 }
             }
 
-            Section(ZtatL10n.tr("菜单栏模块", "Menu Bar Modules")) {
+            Section(ZtatL10n.tr("菜单栏模块（点击“配置”在当前窗口展开详细样式）", "Menu Bar Modules")) {
                 ForEach(self.host.moduleSummaries) { item in
                     HStack(spacing: 10) {
                         Image(systemName: item.symbolName)
@@ -70,8 +87,8 @@ public struct StatsSettingsContainerView: View {
 
                         Spacer()
 
-                        Button(ZtatL10n.tr("自定义", "Customize")) {
-                            self.host.openNativeStatsSettings(selecting: item.id)
+                        Button(ZtatL10n.tr("配置", "Configure")) {
+                            self.navigate(to: item.id)
                         }
                         .controlSize(.small)
                         .disabled(!item.isAvailable)
@@ -159,5 +176,176 @@ public struct StatsSettingsContainerView: View {
         } message: {
             Text(ZtatL10n.tr("这将关闭所有菜单栏监控项并恢复性能监控默认设置。", "All menu bar monitors will be disabled and Stats settings will be restored to defaults."))
         }
+    }
+}
+
+/// Seamless embedded Stats detail pane (module settings, hardware dashboard, or global/stress settings)
+/// rendered directly inside ztat's single Unified Settings window with a cohesive ztat header bar.
+@MainActor
+public struct StatsEmbeddedTargetView: View {
+    public let target: String
+    @ObservedObject private var host: ZtatStatsHost
+    @State private var isPreviewActive: Bool = false
+
+    public init(target: String, host: ZtatStatsHost) {
+        self.target = target
+        self.host = host
+    }
+
+    public init(target: String) {
+        self.init(target: target, host: .shared)
+    }
+
+    private var summary: StatsModuleSummary? {
+        self.host.moduleSummary(for: self.target)
+    }
+
+    private var headerTitle: String {
+        if let summary { return summary.displayName }
+        switch ZtatStatsHost.normalizeSettingsTarget(self.target) {
+        case "dashboard": return ZtatL10n.tr("设备与硬件概览", "Hardware Dashboard")
+        case "settings": return ZtatL10n.tr("监控全局与压力测试", "Monitor Settings & Stress Tests")
+        default: return self.target
+        }
+    }
+
+    private var headerSymbol: String {
+        if let summary { return summary.symbolName }
+        switch ZtatStatsHost.normalizeSettingsTarget(self.target) {
+        case "dashboard": return "desktopcomputer"
+        case "settings": return "slider.horizontal.3"
+        default: return "gauge.with.dots.needle.67percent"
+        }
+    }
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Image(systemName: self.headerSymbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.tint)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(self.headerTitle)
+                        .font(.headline)
+                    if let summary {
+                        Text(summary.liveBadge)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    } else if ZtatStatsHost.normalizeSettingsTarget(self.target) == "dashboard" {
+                        Text(ZtatL10n.tr("实时硬件规格与运行时间", "Live hardware specifications & uptime"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text(ZtatL10n.tr("合并显示策略、配置导入导出与 Apple Silicon 压测", "Combined bar rules, export/import & Apple Silicon stress tests"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                if let summary {
+                    if self.host.moduleHasPreview(summary.id) {
+                        Button {
+                            let next = !self.isPreviewActive
+                            self.isPreviewActive = next
+                            self.host.setModulePreview(summary.id, visible: next)
+                        } label: {
+                            Label(
+                                self.isPreviewActive
+                                    ? ZtatL10n.tr("返回设置", "Settings")
+                                    : ZtatL10n.tr("实时预览", "Live Preview"),
+                                systemImage: self.isPreviewActive ? "slider.horizontal.3" : "eye"
+                            )
+                        }
+                        .controlSize(.small)
+                    }
+
+                    Toggle(
+                        ZtatL10n.tr("菜单栏显示", "Show in Menu Bar"),
+                        isOn: Binding(
+                            get: { summary.isEnabled },
+                            set: { newValue in
+                                self.host.setModuleEnabled(summary.id, enabled: newValue)
+                            }
+                        )
+                    )
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .disabled(!summary.isAvailable)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 12)
+            .background(.bar)
+
+            Divider()
+
+            StatsEmbeddedNSViewHost(target: self.target, host: self.host)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            self.isPreviewActive = false
+            self.host.refreshSummaries()
+            self.host.setModulePreview(self.target, visible: false)
+            self.host.setEmbeddedSettingsTarget(self.target)
+        }
+        .onChange(of: self.target) { _, newTarget in
+            self.isPreviewActive = false
+            self.host.setModulePreview(newTarget, visible: false)
+            self.host.setEmbeddedSettingsTarget(newTarget)
+        }
+        .onDisappear {
+            self.host.setEmbeddedSettingsTarget(nil)
+        }
+    }
+}
+
+private final class StatsEmbeddedHostContainerView: NSView {
+    private var currentTarget: String?
+    private weak var hostedView: NSView?
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        NotificationCenter.default.post(name: .clickInSettings, object: nil, userInfo: nil)
+    }
+
+    @MainActor
+    func display(target: String, host: ZtatStatsHost) {
+        guard self.currentTarget != target || self.hostedView?.superview !== self else { return }
+        self.currentTarget = target
+
+        self.hostedView?.removeFromSuperview()
+        self.subviews.forEach { $0.removeFromSuperview() }
+
+        let child = host.embeddedSettingsView(for: target)
+        child.removeFromSuperview()
+        child.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(child)
+        NSLayoutConstraint.activate([
+            child.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            child.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            child.topAnchor.constraint(equalTo: self.topAnchor),
+            child.bottomAnchor.constraint(equalTo: self.bottomAnchor)
+        ])
+        self.hostedView = child
+    }
+}
+
+@MainActor
+private struct StatsEmbeddedNSViewHost: NSViewRepresentable {
+    let target: String
+    let host: ZtatStatsHost
+
+    func makeNSView(context: Context) -> StatsEmbeddedHostContainerView {
+        let container = StatsEmbeddedHostContainerView(frame: .zero)
+        container.display(target: self.target, host: self.host)
+        return container
+    }
+
+    func updateNSView(_ nsView: StatsEmbeddedHostContainerView, context: Context) {
+        nsView.display(target: self.target, host: self.host)
     }
 }

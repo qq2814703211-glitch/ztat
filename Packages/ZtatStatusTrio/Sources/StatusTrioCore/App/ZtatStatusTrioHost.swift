@@ -12,6 +12,19 @@ public protocol ZtatHubPanelContentProviding: AnyObject {
     func hubPanelVisibilityDidChange(isVisible: Bool)
 }
 
+/// Public sidebar item descriptor for flattening Status Trio categories directly into ztat's single Unified Settings sidebar.
+public struct ZtatStatusTrioSectionItem: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let symbolName: String
+
+    public init(id: String, title: String, symbolName: String) {
+        self.id = id
+        self.title = title
+        self.symbolName = symbolName
+    }
+}
+
 @MainActor
 public final class ZtatStatusTrioHost {
     public static let shared = ZtatStatusTrioHost()
@@ -65,10 +78,33 @@ public final class ZtatStatusTrioHost {
         environment?.statusBarController.dismissPopover()
     }
 
-    public func makeSettingsView() -> AnyView {
+    public func settingsSectionItems() -> [ZtatStatusTrioSectionItem] {
+        let localization = environment?.localization ?? Localization()
+        let ordered: [(SettingsView.Section, String)] = [
+            (.appIcon, "macwindow.on.rectangle"),
+            (.battery, "battery.100percent"),
+            (.network, "wifi"),
+            (.bluetooth, "dot.radiowaves.left.and.right"),
+            (.audio, "speaker.wave.3.fill"),
+            (.brightness, "sun.max.fill"),
+            (.monitor, "gauge.with.dots.needle.bottom.50percent"),
+            (.popover, "list.bullet.rectangle"),
+            (.general, "gearshape.fill"),
+        ]
+        return ordered.map { section, symbol in
+            ZtatStatusTrioSectionItem(
+                id: section.rawValue,
+                title: section.title(localization),
+                symbolName: symbol
+            )
+        }
+    }
+
+    public func makeSettingsDetailView(sectionID: String) -> AnyView {
         guard let environment else {
             return AnyView(EmptyView())
         }
+        let section = SettingsView.Section(rawValue: sectionID) ?? .appIcon
         return AnyView(
             LocalizedRootView(localization: environment.localization) {
                 SettingsView(
@@ -81,10 +117,15 @@ public final class ZtatStatusTrioHost {
                     onShowIconGuide: { [weak environment] in
                         environment?.onboardingWindowController.show()
                     },
-                    isEmbeddedInUnifiedSettings: true
+                    isEmbeddedInUnifiedSettings: true,
+                    externalSection: section
                 )
                 .environmentObject(environment.chargingEffectClock)
             }
         )
+    }
+
+    public func makeSettingsView() -> AnyView {
+        makeSettingsDetailView(sectionID: SettingsView.Section.appIcon.rawValue)
     }
 }

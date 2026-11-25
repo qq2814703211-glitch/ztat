@@ -126,7 +126,7 @@ public struct StatsHubControlView: View {
             }
             .buttonStyle(.plain)
             .disabled(!item.isAvailable)
-            .help(ZtatL10n.tr("自定义 \(item.displayName) 组件样式与弹窗", "Customize \(item.displayName) widget & popup"))
+            .help(ZtatL10n.tr("在 ztat 设置中配置 \(item.displayName)", "Configure \(item.displayName) in ztat Settings"))
 
             Toggle("", isOn: Binding(
                 get: { item.isEnabled },

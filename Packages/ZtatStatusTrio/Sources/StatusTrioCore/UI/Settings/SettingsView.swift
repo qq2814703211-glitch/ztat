@@ -24,8 +24,10 @@ struct SettingsView: View {
     /// The optional leaf within `consumePendingSection`'s tab, for deep links
     /// that target a specific subpage.
     var consumePendingSubtopic: () -> SettingsSubtopic? = { nil }
-    // ZTAT-PATCH: Allow embedding Status Trio Settings cleanly inside ztat's unified Settings window.
+    // ZTAT-PATCH: Allow embedding Status Trio Settings cleanly inside ztat's unified Settings window
+    // with optional external section binding that hides Status Trio's inner sidebar (zero double sidebars).
     var isEmbeddedInUnifiedSettings: Bool = false
+    var externalSection: Section? = nil
 
     @StateObject private var navigation = SettingsNavigationModel()
     /// Kept above the category switch so leaving General does not discard undo or preview.
@@ -41,7 +43,8 @@ struct SettingsView: View {
         onShowIconGuide: @escaping () -> Void,
         consumePendingSection: @escaping () -> Section? = { nil },
         consumePendingSubtopic: @escaping () -> SettingsSubtopic? = { nil },
-        isEmbeddedInUnifiedSettings: Bool = false
+        isEmbeddedInUnifiedSettings: Bool = false,
+        externalSection: Section? = nil
     ) {
         self.store = store
         self.statusStore = statusStore
@@ -53,6 +56,7 @@ struct SettingsView: View {
         self.consumePendingSection = consumePendingSection
         self.consumePendingSubtopic = consumePendingSubtopic
         self.isEmbeddedInUnifiedSettings = isEmbeddedInUnifiedSettings
+        self.externalSection = externalSection
         _transferSession = StateObject(wrappedValue: SettingsTransferSession(store: store, localization: localization))
     }
     /// The live system appearance, so the menu bar preview starts in the same
@@ -136,14 +140,55 @@ struct SettingsView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            sidebar
-                .frame(width: Self.sidebarWidth)
-                .background(SidebarMaterial())
+        // ZTAT-PATCH: When driven by ztat's unified sidebar, render detail-only without a nested second sidebar.
+        Group {
+            if isEmbeddedInUnifiedSettings, let externalSection {
+                VStack(spacing: 0) {
+                    if externalSection.hasSubtopics {
+                        HStack(spacing: 6) {
+                            ForEach(subtopics(for: externalSection)) { subtopic in
+                                let isSelected = navigation.selectedSubtopic == subtopic
+                                Button {
+                                    selectSubtopic(subtopic)
+                                } label: {
+                                    Text(subtopic.title(localization))
+                                        .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                                        .padding(.horizontal, 10)
+                                        .padding(.vertical, 5)
+                                        .background(
+                                            Capsule(style: .continuous)
+                                                .fill(isSelected ? Color.accentColor.opacity(0.18) : Color.primary.opacity(0.05))
+                                        )
+                                        .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 9)
+                        .background(.bar)
+                        Divider()
+                    }
+                    detail
+                }
+                .onAppear {
+                    navigation.select(externalSection)
+                }
+                .onChange(of: externalSection) { _, newSection in
+                    navigation.select(newSection)
+                }
+            } else {
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: Self.sidebarWidth)
+                        .background(SidebarMaterial())
 
-            Divider()
+                    Divider()
 
-            detail
+                    detail
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .modifier(ConditionalIgnoresSafeArea(active: !isEmbeddedInUnifiedSettings))

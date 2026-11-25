@@ -53,8 +53,9 @@ private final class SettingsDirectoryCache {
 /// Settings window with named tools in the sidebar. The detail keeps each
 /// tool's existing settings and section anchor.
 struct SettingsView: View {
-    // ZTAT-PATCH: Support clean embedding inside ztat's unified Settings window without conflicting toolbar/minWidth.
+    // ZTAT-PATCH: Support clean embedding inside ztat's unified Settings window without conflicting toolbar/minWidth or nested sidebar.
     var embeddedInZtat: Bool = false
+    var hideSidebar: Bool = false
     @ObservedObject private var l10n = L10n.shared
     @ObservedObject private var router = SettingsRouter.shared
     @ObservedObject private var features = FeatureRuntime.shared
@@ -137,6 +138,24 @@ struct SettingsView: View {
     }
 
     var body: some View {
+        // ZTAT-PATCH: When hosted inside ztat's single Unified Settings window, render detail-only without nested NavigationSplitView.
+        if hideSidebar {
+            GeometryReader { geometry in
+                detail
+                    .settingsSectionFocus(for: router.page)
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            }
+            .frame(minWidth: 520, maxWidth: .infinity, minHeight: 420, maxHeight: .infinity)
+            .onAppear { ensureVisiblePage() }
+            .onChange(of: features.revision) { _, _ in ensureVisiblePage() }
+            .onChange(of: router.requestID) { _, _ in ensureVisiblePage() }
+        } else {
+            splitBody
+        }
+    }
+
+    @ViewBuilder
+    private var splitBody: some View {
         let searchResults: SearchResultsSnapshot = {
             guard hasSearchQuery else { return SearchResultsSnapshot(query: searchQuery, groups: []) }
             return SearchResultsSnapshot(

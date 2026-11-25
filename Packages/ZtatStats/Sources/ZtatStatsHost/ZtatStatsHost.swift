@@ -58,7 +58,10 @@ public final class ZtatStatsHost: ObservableObject {
 
     private var isStarted: Bool = false
     private var combinedView: CombinedView?
-    private var settingsWindow: SettingsWindow?
+    // ZTAT-PATCH: Embedded settings views hosted inside ztat's single Unified Settings window (zero standalone SettingsWindow).
+    private var embeddedDashboard: Dashboard?
+    private var embeddedAppSettings: ApplicationSettings?
+    private var visibleEmbeddedModule: String?
     private var observers: [NSObjectProtocol] = []
     private var liveBadges: [String: String] = [:]
 
@@ -126,8 +129,9 @@ public final class ZtatStatsHost: ObservableObject {
         modules.forEach { $0.terminate() }
         self.combinedView?.disable()
         self.combinedView = nil
-        self.settingsWindow?.close()
-        self.settingsWindow = nil
+        self.setEmbeddedSettingsTarget(nil)
+        self.embeddedDashboard = nil
+        self.embeddedAppSettings = nil
 
         DB.shared.terminate()
         self.isStarted = false
@@ -194,16 +198,103 @@ public final class ZtatStatsHost: ObservableObject {
         NotificationCenter.default.post(name: .ztatStatsDidChange, object: nil)
     }
 
+    /// Routes any Stats settings request into ztat's single unified Settings window (never pops out a separate Stats window).
     public func openNativeStatsSettings() {
         self.openNativeStatsSettings(selecting: nil)
     }
 
     public func openNativeStatsSettings(selecting moduleName: String?) {
+        let mapped = Self.normalizeSettingsTarget(moduleName)
+        NotificationCenter.default.post(
+            name: .ztatOpenSettings,
+            object: ZtatSettingsRoute.stats(target: mapped)
+        )
+    }
+
+    public static func normalizeSettingsTarget(_ raw: String?) -> String {
+        guard let raw, !raw.isEmpty else { return "overview" }
+        switch raw {
+        case "Combined modules", "overview", "Overview":
+            return "overview"
+        case "Dashboard", "dashboard":
+            return "dashboard"
+        case "Settings", "settings":
+            return "settings"
+        default:
+            return raw
+        }
+    }
+
+    public func embeddedSettingsView(for target: String) -> NSView {
         if !self.isStarted {
             self.start()
         }
-        let window = self.ensureSettingsWindow()
-        window.open(module: moduleName ?? "Dashboard")
+        let normalized = Self.normalizeSettingsTarget(target)
+        if normalized == "dashboard" {
+            let view = self.embeddedDashboard ?? Dashboard()
+            self.embeddedDashboard = view
+            NotificationCenter.default.post(name: .openModuleSettings, object: nil, userInfo: ["module": "Dashboard"])
+            return view
+        }
+        if normalized == "settings" {
+            let view = self.embeddedAppSettings ?? ApplicationSettings()
+            self.embeddedAppSettings = view
+            view.viewWillAppear()
+            return view
+        }
+        if let module = self.findModule(named: normalized), let view = module.ensureSettingsWindow() {
+            return view
+        }
+        return NSView()
+    }
+
+    public func setEmbeddedSettingsTarget(_ target: String?) {
+        let normalizedModule: String?
+        if let target {
+            let norm = Self.normalizeSettingsTarget(target)
+            if self.findModule(named: norm) != nil {
+                normalizedModule = norm
+            } else {
+                normalizedModule = nil
+            }
+        } else {
+            normalizedModule = nil
+        }
+        guard normalizedModule != self.visibleEmbeddedModule else { return }
+        self.visibleEmbeddedModule = normalizedModule
+        var info: [String: Any] = ["state": normalizedModule != nil]
+        if let normalizedModule {
+            info["module"] = normalizedModule
+        }
+        NotificationCenter.default.post(name: .openWindow, object: self, userInfo: info)
+    }
+
+    public func moduleHasPreview(_ moduleName: String) -> Bool {
+        if !self.isStarted {
+            self.start()
+        }
+        return self.findModule(named: moduleName)?.config.hasPreview ?? false
+    }
+
+    public func isModulePreviewVisible(_ moduleName: String) -> Bool {
+        self.findModule(named: moduleName)?.window?.isShowingPreview ?? false
+    }
+
+    public func setModulePreview(_ moduleName: String, visible: Bool) {
+        if !self.isStarted {
+            self.start()
+        }
+        guard let module = self.findModule(named: moduleName) else { return }
+        _ = module.ensureSettingsWindow()
+        module.window?.setPreviewVisible(visible)
+    }
+
+    public func toggleModulePreview(_ moduleName: String) {
+        NotificationCenter.default.post(name: .togglePreview, object: nil, userInfo: ["module": moduleName])
+    }
+
+    public func moduleSummary(for moduleName: String) -> StatsModuleSummary? {
+        self.moduleSummaries.first(where: { $0.id == moduleName })
     }
 
     public func resetAllStatsPreferences() {
@@ -219,9 +310,9 @@ public final class ZtatStatsHost: ObservableObject {
         Store.shared.reset()
         self.isCombinedModulesEnabled = false
 
-        // Sync closed native settings window cleanly if open
-        self.settingsWindow?.close()
-        self.settingsWindow = nil
+        self.setEmbeddedSettingsTarget(nil)
+        self.embeddedDashboard = nil
+        self.embeddedAppSettings = nil
 
         self.combinedView?.syncVisibility()
         self.refreshSummaries()
@@ -290,18 +381,6 @@ public final class ZtatStatsHost: ObservableObject {
     }
 
     // MARK: - Private
-
-    private func ensureSettingsWindow() -> SettingsWindow {
-        if let window = self.settingsWindow {
-            return window
-        }
-        let window = SettingsWindow()
-        window.onClose = { [weak self] in
-            self?.settingsWindow = nil
-        }
-        self.settingsWindow = window
-        return window
-    }
 
     private func findModule(named name: String) -> Module? {
         modules.first { $0.config.name == name }

@@ -769,8 +769,12 @@ final class AppEnvironment {
             }
         }
         let openAppBatterySettingsAction: () -> Void = { [weak hubContentProvider] in
-            if let hubContentProvider {
-                hubContentProvider.openUnifiedSettings()
+            if hubContentProvider != nil {
+                // ZTAT-PATCH: Deep-link directly to Battery page inside ztat's single Unified Settings window.
+                NotificationCenter.default.post(
+                    name: .ztatOpenSettings,
+                    object: ZtatSettingsRoute.statusTrio(sectionID: "battery")
+                )
             } else {
                 settingsWindowController?.show(section: .battery)
             }
@@ -842,7 +846,14 @@ final class AppEnvironment {
         let mainMenuController = MainMenuController(
             activationPolicy: activationPolicy,
             localization: localization,
-            openSettings: { resolvedSettingsWindowController.show() }
+            // ZTAT-PATCH: Route Cmd-, / main menu Settings into ztat's unified Settings window when embedded.
+            openSettings: { [weak hubContentProvider, weak resolvedSettingsWindowController] in
+                if let hubContentProvider {
+                    hubContentProvider.openUnifiedSettings()
+                } else {
+                    resolvedSettingsWindowController?.show()
+                }
+            }
         )
         let telemetryConfiguration = TelemetryConfiguration()
         let telemetryTransport = URLSessionTelemetryTransport(configuration: telemetryConfiguration)

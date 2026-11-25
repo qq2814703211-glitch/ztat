@@ -109,8 +109,8 @@ struct ZtatHubRootView: View {
                 Button(ZtatL10n.tr("打开统一设置...", "Unified Settings...")) {
                     onOpenSettings(settingsSection(for: selectedTab))
                 }
-                Button(ZtatL10n.tr("性能监控高级配置...", "Stats Widget Configuration...")) {
-                    statsHost.openNativeStatsSettings()
+                Button(ZtatL10n.tr("本机硬件概览...", "Hardware Dashboard...")) {
+                    statsHost.openNativeStatsSettings(selecting: "dashboard")
                 }
                 Divider()
                 Button(powerGuard.isAnyGuardActive

@@ -45,16 +45,19 @@ final class ZtatAppDelegate: NSObject, NSApplicationDelegate, ZtatHubPanelConten
             object: nil,
             queue: .main
         ) { note in
-            let section: ZtatSettingsSection
-            if let s = note.object as? ZtatSettingsSection {
-                section = s
+            let route: ZtatSettingsRoute
+            if let r = note.object as? ZtatSettingsRoute {
+                route = r
+            } else if let s = note.object as? ZtatSettingsSection {
+                route = ZtatSettingsRoute(section: s)
             } else if let raw = note.object as? String, let s = ZtatSettingsSection(rawValue: raw) {
-                section = s
+                route = ZtatSettingsRoute(section: s)
             } else {
-                section = .general
+                route = .general
             }
             Task { @MainActor in
-                ZtatSettingsWindowController.shared.show(section: section)
+                ZtatStatusTrioHost.shared.dismissHubPanel()
+                ZtatSettingsWindowController.shared.show(route: route)
             }
         }
 

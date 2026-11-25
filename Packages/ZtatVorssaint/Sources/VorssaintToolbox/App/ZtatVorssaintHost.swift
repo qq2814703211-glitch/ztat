@@ -7,9 +7,36 @@ import Combine
 import SwiftUI
 import ZtatCore
 
+/// Public sidebar descriptors flattening Vorssaint toolbox categories directly into ztat's single Unified Settings sidebar.
+public struct ZtatToolboxNavItem: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+    public let icon: String
+
+    public init(id: String, title: String, icon: String) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+    }
+}
+
+public struct ZtatToolboxNavGroup: Identifiable, Sendable {
+    public let id: Int
+    public let title: String
+    public let items: [ZtatToolboxNavItem]
+
+    public init(id: Int, title: String, items: [ZtatToolboxNavItem]) {
+        self.id = id
+        self.title = title
+        self.items = items
+    }
+}
+
 @MainActor
 public final class ZtatVorssaintHost: ObservableObject {
     public static let shared = ZtatVorssaintHost()
+
+    @Published public private(set) var navigationRevision: Int = 0
 
     private var isStarted = false
     private var statusController: StatusItemController?
@@ -100,6 +127,18 @@ public final class ZtatVorssaintHost: ObservableObject {
                 FeatureRuntime.shared.sync([.dockPreview, .screenRecorder])
             }
             .store(in: &cancellables)
+
+        FeatureRuntime.shared.$revision
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.navigationRevision &+= 1 }
+            .store(in: &cancellables)
+
+        L10n.shared.$language
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.navigationRevision &+= 1 }
+            .store(in: &cancellables)
     }
 
     /// Stop ONLY services that were actually started during this session.
@@ -140,24 +179,113 @@ public final class ZtatVorssaintHost: ObservableObject {
         )
     }
 
+    private static func stableSidebarID(for id: SettingsSidebarItem.ID) -> String {
+        switch id {
+        case .page(let page):
+            return "page:\(String(describing: page))"
+        case .feature(let feature):
+            return "feature:\(feature.rawValue)"
+        case .setting(let anchor):
+            return "setting:\(String(describing: anchor))"
+        }
+    }
+
+    private func rawSidebarSections() -> [SettingsSidebarSection] {
+        let superKeyRaw = UserDefaults.standard.string(forKey: DefaultsKey.superKeySource) ?? SuperKeySource.capsLock.rawValue
+        return SettingsDirectory.sidebarSections(
+            L10n.shared.s,
+            language: L10n.shared.language,
+            superKeySource: SuperKeySource.sanitized(superKeyRaw),
+            isAvailable: { FeatureRuntime.shared.isAvailable($0) }
+        )
+    }
+
+    /// Flat sidebar groups of deduplicated Vorssaint toolbox pages for ztat's single Unified Settings sidebar.
+    public func sidebarGroups() -> [ZtatToolboxNavGroup] {
+        rawSidebarSections().compactMap { section in
+            let mapped = section.items.map { item -> ZtatToolboxNavItem in
+                let title: String
+                if case .page(.general) = item.id {
+                    title = ZtatL10n.tr("工具箱偏好与权限", "Toolbox Preferences & Permissions")
+                } else {
+                    title = item.title
+                }
+                return ZtatToolboxNavItem(
+                    id: Self.stableSidebarID(for: item.id),
+                    title: title,
+                    icon: item.icon
+                )
+            }
+            guard !mapped.isEmpty else { return nil }
+            return ZtatToolboxNavGroup(id: section.id, title: section.title, items: mapped)
+        }
+    }
+
+    public func defaultToolboxItemID() -> String {
+        let items = rawSidebarSections().flatMap(\.items)
+        if let featuresItem = items.first(where: { $0.id == .page(.features) }) {
+            return Self.stableSidebarID(for: featuresItem.id)
+        }
+        if let first = items.first {
+            return Self.stableSidebarID(for: first.id)
+        }
+        return "page:features"
+    }
+
+    public func currentSelectedToolboxItemID() -> String {
+        let items = rawSidebarSections().flatMap(\.items)
+        let router = SettingsRouter.shared
+        if let selected = SettingsSidebarSupport.selection(
+            for: router.destination,
+            in: items,
+            preferredID: router.sidebarFeature.map { .feature($0) }
+        ) {
+            return Self.stableSidebarID(for: selected)
+        }
+        return defaultToolboxItemID()
+    }
+
+    public func selectToolboxItem(id: String) {
+        let items = rawSidebarSections().flatMap(\.items)
+        guard let item = items.first(where: { Self.stableSidebarID(for: $0.id) == id }) else {
+            if !FeatureVisibilitySupport.isPageVisible(SettingsRouter.shared.page, isAvailable: { $0.isAvailable }) {
+                SettingsRouter.shared.page = .features
+            }
+            return
+        }
+        let feature: AppFeature?
+        if case .feature(let f) = item.id {
+            feature = f
+        } else {
+            feature = nil
+        }
+        if SettingsRouter.shared.destination != item.destination || SettingsRouter.shared.sidebarFeature != feature {
+            SettingsRouter.shared.request(item.destination, sidebarFeature: feature)
+        }
+    }
+
+    /// Detail-only Vorssaint settings view (zero inner sidebar) hosted inside ztat's single Unified Settings window.
+    public func makeDetailOnlySettingsView() -> AnyView {
+        if !FeatureVisibilitySupport.isPageVisible(SettingsRouter.shared.page, isAvailable: { $0.isAvailable }) {
+            SettingsRouter.shared.page = .features
+        }
+        return AnyView(SettingsView(embeddedInZtat: true, hideSidebar: true))
+    }
+
     /// Embedded Vorssaint Feature Hub & Settings view for ztat's unified Settings window
     /// (with all overlapping Monitor / FanControl / KeepAwake / Vorssaint Update sections removed).
     public func makeSettingsView() -> AnyView {
-        if !FeatureVisibilitySupport.isPageVisible(SettingsRouter.shared.page, isAvailable: { $0.isAvailable })
-            || SettingsRouter.shared.page == .general {
-            SettingsRouter.shared.page = .features
-        }
-        return AnyView(SettingsView(embeddedInZtat: true))
+        makeDetailOnlySettingsView()
     }
 
     /// Internal bridge used by embedded Vorssaint views (Notch, SnippetLibrary, Toolbox panel,
-    /// CommandBar, RadialMenu, Cleaner) to open ztat's unified Settings window focused on Toolbox.
+    /// CommandBar, RadialMenu, Cleaner) to open ztat's unified Settings window focused on the exact tool.
     func requestOpenSettings() {
-        if let handler = activeOpenSettingsHandler {
-            handler()
-        } else {
-            NotificationCenter.default.post(name: .ztatOpenSettings, object: ZtatSettingsSection.toolbox)
-        }
+        let itemID = currentSelectedToolboxItemID()
+        NotificationCenter.default.post(
+            name: .ztatOpenSettings,
+            object: ZtatSettingsRoute.toolbox(itemID: itemID)
+        )
     }
 
     /// Internal bridge used by TrashAppWatcher and CommandBar to open the Uninstaller page

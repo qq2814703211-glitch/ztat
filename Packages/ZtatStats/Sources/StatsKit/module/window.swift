@@ -156,7 +156,9 @@ open class Window: NSStackView {
         self.addArrangedSubview(settingsView)
         
         if self.isPreviewAvailable, let previewView = self.preview() {
-            settingsView.isHidden = true
+            // ZTAT-PATCH: Show module configuration settings by default inside ztat's Unified Settings window;
+            // preview is toggled on-demand via setPreviewVisible(_:).
+            previewView.isHidden = true
             self.addArrangedSubview(previewView)
             self.previewView = previewView
         }
@@ -164,6 +166,7 @@ open class Window: NSStackView {
         NotificationCenter.default.addObserver(self, selector: #selector(self.listenForOneView), name: .toggleOneView, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(self.listenForToggleView), name: .togglePreview, object: nil)
         
+        self.settingsView?.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         self.previewView?.widthAnchor.constraint(equalTo: self.widthAnchor).isActive = true
         self.segmentedControl?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
         self.widgetSelector?.widthAnchor.constraint(equalTo: self.widthAnchor, constant: -(Constants.Settings.margin*2)).isActive = true
@@ -275,8 +278,9 @@ open class Window: NSStackView {
         let view = NSStackView()
         view.orientation = .vertical
         view.spacing = Constants.Settings.margin
+        // ZTAT-PATCH: Add top inset so module settings sit cleanly beneath ztat's unified header divider.
         view.edgeInsets = NSEdgeInsets(
-            top: 0,
+            top: Constants.Settings.margin,
             left: Constants.Settings.margin,
             bottom: Constants.Settings.margin,
             right: Constants.Settings.margin
@@ -465,18 +469,26 @@ open class Window: NSStackView {
         }
     }
     
+    // ZTAT-PATCH: Expose deterministic preview visibility for ztat's unified Settings header.
+    public var isShowingPreview: Bool {
+        guard let preview = self.previewView else { return false }
+        return !preview.isHidden
+    }
+
+    public func setPreviewVisible(_ visible: Bool) {
+        guard let preview = self.previewView else { return }
+        preview.isHidden = !visible
+        self.settingsView?.isHidden = visible
+    }
+
     @objc private func listenForToggleView(_ notification: Notification) {
         guard let moduleName = notification.userInfo?["module"], self.config.name == moduleName as? String else { return }
         self.toggleView()
     }
     
     private func toggleView() {
-        if let preview = self.previewView {
-            preview.isHidden = !preview.isHidden
-        }
-        if let settings = self.settingsView {
-            settings.isHidden = !settings.isHidden
-        }
+        guard let preview = self.previewView else { return }
+        self.setPreviewVisible(preview.isHidden)
     }
 }
 

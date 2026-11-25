@@ -10,6 +10,8 @@
 //
 
 import Cocoa
+// ZTAT-PATCH: Import ZtatCore for unified ztat tooltip localization.
+import ZtatCore
 
 public final class PopupCache<T> {
     public var value: T?
@@ -458,12 +460,13 @@ internal class HeaderView: NSStackView {
         settings.bezelStyle = .regularSquare
         settings.translatesAutoresizingMaskIntoConstraints = false
         settings.imageScaling = .scaleNone
-        settings.image = iconFromSymbol(name: "command", scale: .large)
+        // ZTAT-PATCH: Use standard gear icon and ztat unified settings tooltip.
+        settings.image = iconFromSymbol(name: "gearshape", scale: .large)
         settings.contentTintColor = .lightGray
         settings.isBordered = false
         settings.action = #selector(self.openSettings)
         settings.target = self
-        settings.toolTip = localizedString("Open module")
+        settings.toolTip = ZtatL10n.tr("在 ztat 设置中配置", "Configure in ztat Settings")
         settings.focusRingType = .none
         
         self.addArrangedSubview(activity)

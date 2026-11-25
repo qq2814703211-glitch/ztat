@@ -149,6 +149,23 @@ struct ZtatStatsTests {
         DB.shared.delete(key: key)
         #expect(DB.shared.findOne(SampleRecord.self, key: key) == nil)
     }
+
+    @Test("Stats settings target normalization maps popup/portal targets into ztat unified Settings routes")
+    @MainActor
+    func statsUnifiedSettingsTargetNormalization() {
+        #expect(ZtatStatsHost.normalizeSettingsTarget(nil) == "overview")
+        #expect(ZtatStatsHost.normalizeSettingsTarget("Combined modules") == "overview")
+        #expect(ZtatStatsHost.normalizeSettingsTarget("Dashboard") == "dashboard")
+        #expect(ZtatStatsHost.normalizeSettingsTarget("Settings") == "settings")
+        #expect(ZtatStatsHost.normalizeSettingsTarget("CPU") == "CPU")
+        #expect(ZtatStatsHost.normalizeSettingsTarget("RAM") == "RAM")
+
+        #expect(ZtatSettingsRoute(section: .general) == .general)
+        #expect(ZtatSettingsRoute(section: .powerGuard) == .powerGuard)
+        #expect(ZtatSettingsRoute(section: .statusTrio) == .statusTrio(sectionID: nil))
+        #expect(ZtatSettingsRoute(section: .stats) == .stats(target: nil))
+        #expect(ZtatSettingsRoute(section: .toolbox) == .toolbox(itemID: nil))
+    }
 }
 
 @Suite("ZtatStatusTrio Primary Host & Optimizations")
@@ -167,6 +184,22 @@ struct ZtatStatusTrioTests {
         #expect(StatusBarChargingFrameCache.steadyFrameCount > 1)
         #expect(cache.rasterizedFrameCount == 0)
         #expect(cache.rebuildCount == 0)
+    }
+
+    @Test("Status Trio exposes flat section descriptors for ztat unified sidebar without keepAwake or about")
+    @MainActor
+    func flatStatusTrioSettingsSections() {
+        let items = ZtatStatusTrioHost.shared.settingsSectionItems()
+        let ids = items.map(\.id)
+        #expect(ids.contains("appIcon"))
+        #expect(ids.contains("battery"))
+        #expect(ids.contains("network"))
+        #expect(!ids.contains("keepAwake"))
+        #expect(!ids.contains("about"))
+        for item in items {
+            #expect(!item.title.isEmpty)
+            #expect(!item.symbolName.isEmpty)
+        }
     }
 }
 
@@ -195,5 +228,15 @@ struct ZtatVorssaintTests {
     @Test("Vorssaint branding is rebranded to ztat per upstream TRADEMARKS.md")
     func rebrandedAppInfo() {
         #expect(AppInfo.name == ZtatBrand.appName)
+    }
+
+    @Test("Vorssaint exposes flat toolbox sidebar groups for ztat unified Settings window")
+    @MainActor
+    func flatVorssaintSidebarGroups() {
+        let groups = ZtatVorssaintHost.shared.sidebarGroups()
+        #expect(!groups.isEmpty)
+        let allItems = groups.flatMap(\.items)
+        #expect(!allItems.isEmpty)
+        #expect(!ZtatVorssaintHost.shared.defaultToolboxItemID().isEmpty)
     }
 }

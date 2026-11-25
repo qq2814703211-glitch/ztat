@@ -68,15 +68,14 @@ class ApplicationSettings: NSStackView {
         self.translatesAutoresizingMaskIntoConstraints = false
 
         let scrollView = ScrollableStackView(orientation: .vertical)
+        // ZTAT-PATCH: Omit standalone Stats logo/version banner when embedded inside ztat Unified Settings.
         scrollView.stackView.edgeInsets = NSEdgeInsets(
-            top: 0,
+            top: Constants.Settings.margin,
             left: Constants.Settings.margin,
             bottom: Constants.Settings.margin,
             right: Constants.Settings.margin
         )
         scrollView.stackView.spacing = Constants.Settings.margin
-
-        scrollView.stackView.addArrangedSubview(self.informationView())
 
         scrollView.stackView.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("Temperature"), component: self.selectView(
@@ -184,53 +183,7 @@ class ApplicationSettings: NSStackView {
         self.updateCombinedModulesSettings()
     }
 
-    private func informationView() -> NSView {
-        let view = NSStackView()
-        view.heightAnchor.constraint(equalToConstant: 140).isActive = true
-        view.orientation = .vertical
-        view.distribution = .fill
-        view.alignment = .centerY
-        view.spacing = 0
-
-        let container: NSGridView = NSGridView()
-        container.heightAnchor.constraint(equalToConstant: 120).isActive = true
-        container.rowSpacing = 4
-        container.yPlacement = .center
-        container.xPlacement = .center
-
-        let symbolConfig = NSImage.SymbolConfiguration(pointSize: 44, weight: .regular)
-        let iconImage = NSImage(systemSymbolName: "gauge.with.dots.needle.67percent", accessibilityDescription: "ztat Stats")?
-            .withSymbolConfiguration(symbolConfig) ?? NSImage(size: NSSize(width: 48, height: 48))
-        let iconView = NSImageView(image: iconImage)
-        iconView.contentTintColor = .controlAccentColor
-
-        let statsName: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 22))
-        statsName.alignment = .center
-        statsName.font = NSFont.systemFont(ofSize: 18, weight: .semibold)
-        statsName.stringValue = "ztat Stats"
-        statsName.isSelectable = true
-
-        let versionNumber = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ZtatBrand.version
-        let buildNumber = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ZtatBrand.buildNumber
-
-        let statsVersion: NSTextField = TextView(frame: NSRect(x: 0, y: 0, width: view.frame.width, height: 16))
-        statsVersion.alignment = .center
-        statsVersion.font = NSFont.systemFont(ofSize: 12, weight: .regular)
-        statsVersion.stringValue = "\(localizedString("Version")) \(versionNumber)"
-        statsVersion.isSelectable = true
-        statsVersion.toolTip = "\(localizedString("Build number")) \(buildNumber)"
-
-        container.addRow(with: [iconView])
-        container.addRow(with: [statsName])
-        container.addRow(with: [statsVersion])
-
-        container.row(at: 1).height = 22
-        container.row(at: 2).height = 20
-
-        view.addArrangedSubview(container)
-
-        return view
-    }
+    // ZTAT-PATCH: Standalone Stats informationView() removed; ztat version/branding lives in General Settings.
 
     // MARK: - actions
 

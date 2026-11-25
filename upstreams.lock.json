@@ -38,8 +38,8 @@
     "status-trio": {
       "url": "https://github.com/lingyired/status-trio.git",
       "branch": "main",
-      "commit": "8cb6964aaba540efeda10564c61c6a552d5f4d0d",
-      "describe": "v1.10.5-40-g8cb6964",
+      "commit": "a7d937fd768ca688ee5beee151af0313a5dcfeb8",
+      "describe": "v1.10.5-41-ga7d937fd",
       "license": "Apache-2.0",
       "integrationMode": "modular-vendored-source",
       "targetPath": "Packages/ZtatStatusTrio",

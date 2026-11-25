@@ -10,6 +10,8 @@
 //
 
 import Cocoa
+// ZTAT-PATCH: Import ZtatCore for unified ztat tooltip localization.
+import ZtatCore
 
 public protocol Portal_p: NSView {
     var name: String { get }
@@ -106,7 +108,8 @@ public class PortalHeader: NSStackView {
         settings.isBordered = false
         settings.action = #selector(self.openSettings)
         settings.target = self
-        settings.toolTip = localizedString("Open module settings")
+        // ZTAT-PATCH: Unified ztat settings tooltip.
+        settings.toolTip = ZtatL10n.tr("在 ztat 设置中配置", "Configure in ztat Settings")
         settings.focusRingType = .none
         
         self.addArrangedSubview(title)
