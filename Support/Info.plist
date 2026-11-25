@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>ztat</string>
+	<key>CFBundleExecutable</key>
+	<string>ztat</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.ztat.app</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>zh-Hant</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>es</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>ztat</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>MacOSX</string>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>ztat — Unified macOS Utility Suite (GPL-3.0-or-later)</string>
+	<key>STIncludesPrivilegedHelper</key>
+	<false/>
+	<key>STTelemetryProduction</key>
+	<false/>
+	<key>NSLocationUsageDescription</key>
+	<string>ztat reads your current Wi-Fi network name and BSSID for the unified status hub and optional network monitor.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ztat reads your current Wi-Fi network name and BSSID for the unified status hub and optional network monitor.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>ztat displays connected Bluetooth devices, headphone battery levels, and noise-control modes in the unified status hub and optional Bluetooth monitor.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>ztat uses per-app audio capture for the app volume mixer (>100% boost), Dynamic Island visualizer, and system audio in screen recordings. Nothing leaves your Mac.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>ztat records your microphone only when you enable microphone capture for a screen recording.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>ztat shows your camera only when you explicitly open the pre-call camera preview tool.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>ztat displays your upcoming calendar events in Dynamic Island when enabled. Events remain strictly on this Mac.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>ztat uses Automation to control media playback, open requested calendar dates, and organize files or trash items you explicitly confirm.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>ztat inspects Downloads only when you run the Cleaner or Managed Downloads tools.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>ztat inspects Desktop only when you run the Cleaner or move confirmed files there.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>ztat accesses Documents only when you choose it as a destination in file management tools.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>ztat accesses network volumes only when you explicitly select them as a destination.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>ztat accesses removable volumes only when you explicitly select them as a destination.</string>
+	<key>NSUserNotificationAlertStyle</key>
+	<string>alert</string>
+</dict>
+</plist>

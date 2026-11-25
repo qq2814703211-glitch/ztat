@@ -1,0 +1,110 @@
+import Foundation
+
+struct PanelAudioDeviceID: Equatable, Hashable, Sendable {
+    let id: UInt32
+    let uid: String?
+}
+
+struct PanelAudioDeviceRow: Equatable, Identifiable, Sendable {
+    let key: PanelAudioDeviceID
+    let name: String
+    let symbol: IconSymbolSource
+    let selected: Bool
+    let enabled: Bool
+    let accessibilityLabel: String
+    var helpText: String = ""
+    var volumeText: String? = nil
+    var listeningModeAddress: String? = nil
+    var listeningMode: BluetoothListeningModePresentation? = nil
+    var listeningModeUnavailableText: String? = nil
+    var isPreview: Bool = false
+    var supportsAirPodsSystemControls: Bool = false
+    /// Whether this AirPods row has Spatial Audio / Conversation Awareness
+    /// groups to disclose behind the listening-mode row. Unknown (runtime
+    /// reported) capabilities are treated as supported so the chevron shows and
+    /// the group can report "not available" once the read settles.
+    var airPodsSpatialSupported: Bool = false
+    var airPodsConversationSupported: Bool = false
+    /// True while AirPods listening-mode discovery is still running for this row
+    /// and no control has arrived yet. The row renders its final layout (a
+    /// listening-row placeholder plus chevron) instead of the "listening mode
+    /// unavailable" fallback, so the panel height does not jump when the control
+    /// arrives (#354).
+    var listeningModeIsBeingDiscovered: Bool = false
+
+    var id: PanelAudioDeviceID { key }
+}
+
+struct AudioOutputListPreferences: Equatable, Sendable {
+    let order: [String]
+    let hiddenUIDs: Set<String>
+    let visibleLimit: Int?
+
+    init(order: [String] = [], hiddenUIDs: Set<String> = [], visibleLimit: Int? = 5) {
+        self.order = order
+        self.hiddenUIDs = hiddenUIDs
+        self.visibleLimit = visibleLimit.map { max(0, $0) }
+    }
+
+    static let `default` = Self()
+}
+
+struct VolumePanelState: Equatable, Sendable {
+    let summary: PanelSummaryState
+    let scalar: Double?
+    let percentageText: String
+    let outputIdentity: PanelAudioDeviceID?
+    let interactionIdentity: VolumeControlInteractionIdentity
+    let muted: Bool
+    /// True when the muted state is the app's own automatic mute (volume driven
+    /// to exact zero), not a user's manual mute.
+    var isAutoMuted: Bool = false
+    let muteState: VolumeMuteState
+    let canAdjust: Bool
+    let canMute: Bool
+    let muteSymbol: String
+    let muteHelp: String
+    let sliderLabel: String
+    let showsDeviceList: Bool
+    /// An equal-height skeleton to draw while the real rows are being re-read
+    /// after the panel reopens. Nil once real data is available (or when no
+    /// layout was ever recorded).
+    let deviceListPlaceholder: PanelListLayoutSnapshot?
+    /// Complete rows stay resolved in display order. The view owns only whether
+    /// its local disclosure is expanded.
+    let rows: [PanelAudioDeviceRow]
+    let previewRows: [PanelAudioDeviceRow]
+    let visibleLimit: Int?
+    let expandLabel: String
+    let collapseLabel: String
+    let listeningModeTaskID: String
+    let previewLanguageCode: String
+
+    /// A readable level or a named current output keeps the slider usable even
+    /// while the device list is still loading (or is hidden by preference).
+    var hasUsableOutput: Bool {
+        scalar != nil || outputIdentity != nil
+    }
+
+    var hasHiddenRows: Bool {
+        OutputDeviceListPresentation.canToggleExpansion(for: rows, limit: visibleLimit)
+    }
+
+    func visibleRows(expanded: Bool) -> [PanelAudioDeviceRow] {
+        OutputDeviceListPresentation.visibleDevices(
+            from: rows,
+            limit: visibleLimit,
+            isExpanded: expanded
+        )
+    }
+}
+
+enum VolumePanelActionGate {
+    static func toggleMute(
+        in state: VolumePanelState,
+        action: () -> Void
+    ) {
+        guard state.canMute, state.muteState != .unknown else { return }
+        action()
+    }
+}

@@ -1,0 +1,59 @@
+import SwiftUI
+
+struct VPNStatusView: View {
+    @Environment(\.statusPanelBoldTextEnabled) private var panelBoldText
+    let state: PanelSummaryState
+    var onSetPower: (Bool) -> Void = { _ in }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            PanelSymbolView(source: state.symbol)
+                .foregroundStyle(state.tint.color(caution: .orange))
+                .frame(width: 24, height: 24)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(state.title)
+                    .font(.headline.weight(panelBoldText ? .semibold : .regular))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(state.subtitle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if let failure = state.vpnPower?.failureMessage {
+                    Text(failure)
+                        .font(.caption2)
+                        .foregroundStyle(.red)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer()
+
+            if let power = state.vpnPower {
+                powerButton(power)
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(state.accessibilityLabel)
+        .accessibilityValue(state.accessibilityValue)
+    }
+
+    private func powerButton(_ power: VPNPowerPresentation) -> some View {
+        Button {
+            onSetPower(!power.isOn)
+        } label: {
+            PanelActionGlyph(systemName: "power", size: PanelSummaryActionMetrics.actionSlot)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(power.isOn ? Color.accentColor : Color.secondary)
+        .disabled(!power.canSetPower || power.isChanging)
+        .help(power.isChanging
+            ? power.changingHelp
+            : (power.isOn ? power.turnOffHelp : power.turnOnHelp))
+        .accessibilityLabel(power.isOn ? power.turnOffHelp : power.turnOnHelp)
+        .accessibilityValue(power.isChanging ? power.changingHelp : "")
+    }
+}

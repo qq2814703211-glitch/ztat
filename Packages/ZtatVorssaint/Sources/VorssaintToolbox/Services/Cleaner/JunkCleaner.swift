@@ -1,0 +1,813 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+
+import AppKit
+import Combine
+
+/// Finds junk the Mac accumulates — leftovers of uninstalled apps, orphaned
+/// startup items, caches, logs, developer build junk, the Trash, forgotten
+/// screenshots — lets the user review every single path with its size, and
+/// moves what they confirm to the Trash. Nothing is deleted in place,
+/// nothing is touched while the scan runs, and nothing runs at all until the
+/// user opens the tool.
+///
+/// The safety model, in order of importance:
+/// 1. Review first. Every item shows its full path and size before anything
+///    happens, and uncertain finds start unchecked.
+/// 2. Trash, not delete. Every removal is a reversible move to the Trash
+///    (the Trash category itself is the one explicit exception).
+/// 3. Never guess against a living app. A leftover needs a bundle shaped
+///    name whose owner is not installed, not running, not Apple, and not
+///    related to any installed identifier (dot boundary family match),
+///    or container metadata that names that owner. Shared wrappers and plain
+///    names are never treated as proof in this general scan.
+/// 4. Scoped roots only. Items come from fixed, well known junk locations,
+///    plus the top level of the screenshot folders, where only files macOS
+///    itself marked as screen captures are ever considered. The general
+///    scan never enters another app's support tree; symbolic links are
+///    never followed and each item is bound to its observed file identity.
+final class JunkCleaner: ObservableObject {
+    static let shared = JunkCleaner()
+
+    enum Phase: Equatable {
+        case idle
+        case scanning
+        case results
+        case cleaning
+        case done(freed: Int64, failed: Int)
+    }
+
+    struct Item: Identifiable, Equatable {
+        let id = UUID()
+        let url: URL
+        let category: CleanerSupport.Category
+        let size: Int64
+        /// A short secondary line: the owning bundle identifier or label.
+        let detail: String
+        let fileIdentity: UninstallerSupport.FileIdentity?
+        /// Whether this find is safe enough to clean without a second look.
+        /// Recommended items start selected and live in the safe section of
+        /// the interface; the rest wait unchecked under optional.
+        let recommended: Bool
+        var include: Bool
+
+        var name: String { url.lastPathComponent }
+
+        init(url: URL, category: CleanerSupport.Category, size: Int64,
+             detail: String, recommended: Bool) {
+            self.url = url
+            self.category = category
+            self.size = size
+            self.detail = detail
+            self.fileIdentity = UninstallerSupport.fileIdentity(at: url)
+            self.recommended = recommended
+            self.include = recommended
+        }
+
+        static func == (lhs: Item, rhs: Item) -> Bool {
+            lhs.id == rhs.id && lhs.include == rhs.include
+        }
+    }
+
+    @Published private(set) var phase: Phase = .idle
+    @Published var items: [Item] = []
+    /// The category currently being scanned, for the progress line.
+    @Published private(set) var scanningCategory: CleanerSupport.Category?
+
+    private init() {}
+
+    /// Serializes scans so a re-scan started while one runs is ignored.
+    private var scanToken = UUID()
+    /// Lets the running scan's background loop see a cancel; the token only
+    /// guards what reaches the main thread.
+    private var scanCancellation: CleanerSupport.ScanCancellation?
+
+    var selectedSize: Int64 { items.filter(\.include).reduce(0) { $0 + $1.size } }
+    var totalSize: Int64 { items.reduce(0) { $0 + $1.size } }
+    var selectedCount: Int { items.filter(\.include).count }
+
+    func items(in category: CleanerSupport.Category) -> [Item] {
+        items.filter { $0.category == category }
+    }
+
+    func setInclude(_ include: Bool, for id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].include = include
+    }
+
+    func setInclude(_ include: Bool, forCategory category: CleanerSupport.Category) {
+        for index in items.indices where items[index].category == category {
+            items[index].include = include
+        }
+    }
+
+    func reset() {
+        scanToken = UUID()
+        scanCancellation?.cancel()
+        scanCancellation = nil
+        items = []
+        scanningCategory = nil
+        phase = .idle
+    }
+
+    // MARK: - Scan
+
+    /// `attended: false` is a pass nobody watches: it skips the screenshot
+    /// search, which reads the user's own folders and can ask for access.
+    func scan(attended: Bool) {
+        guard phase != .scanning else { return }
+        let token = UUID()
+        scanToken = token
+        scanCancellation?.cancel()
+        let cancellation = CleanerSupport.ScanCancellation()
+        scanCancellation = cancellation
+        items = []
+        phase = .scanning
+        let screenshots = attended ? Self.screenshotSearch() : nil
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard !cancellation.isCancelled else { return }
+            let audioPluginIDs = Self.installedAudioPluginBundleIDs()
+            let installedApps = Self.installedBundleIDs()
+            // A path claimed by the leftover scan must not reappear under
+            // caches or logs: one path, one row, one decision.
+            var claimed = Set<String>()
+            let categories: [(CleanerSupport.Category, () -> [Item])] = [
+                (.leftovers, {
+                    let found = Self.scanLeftovers(installedApps: installedApps, audioPluginIDs: audioPluginIDs)
+                    claimed.formUnion(found.map { $0.url.standardizedFileURL.path })
+                    return found
+                }),
+                (.loginItems, { Self.scanOrphanedLaunchPlists(installed: installedApps.union(audioPluginIDs)) }),
+                (.caches, { Self.scanCaches(excluding: claimed, audioPluginIDs: audioPluginIDs) }),
+                (.logs, { Self.scanLogs(excluding: claimed) }),
+                (.developer, { Self.scanDeveloperJunk() }),
+                (.trash, { Self.scanTrash() }),
+                (.deviceBackups, { Self.scanDeviceBackups() }),
+            ] + (screenshots.map { search in
+                [(.screenshots, { Self.scanScreenshots(in: search.folders, days: search.days) })]
+            } ?? [])
+            for (category, run) in categories {
+                guard !cancellation.isCancelled else { return }
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.scanToken == token else { return }
+                    self.scanningCategory = category
+                }
+                let found = run()
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.scanToken == token else { return }
+                    self.items.append(contentsOf: found)
+                }
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.scanToken == token else { return }
+                self.scanCancellation = nil
+                self.scanningCategory = nil
+                self.phase = .results
+            }
+        }
+    }
+
+    // MARK: - Clean
+
+    /// Each batch shares one app inventory across its serial removal checks.
+    private static func cachedAppLookup(_ load: @escaping () -> Set<String>) -> () -> Set<String> {
+        var cached: Set<String>?
+        return {
+            if let cached { return cached }
+            let apps = load()
+            cached = apps
+            return apps
+        }
+    }
+
+    private static func removalCheck(for items: [Item]) -> (Item) -> Bool {
+        let needsPluginIDs = items.contains { [.leftovers, .loginItems, .caches, .logs].contains($0.category) }
+        let audioPluginIDs = needsPluginIDs ? installedAudioPluginBundleIDs() : []
+        let installedApps = cachedAppLookup(installedBundleIDs)
+        return { mayRemove($0, installedApps: installedApps, audioPluginIDs: audioPluginIDs) }
+    }
+
+    /// `escalate: false` leaves whatever the Trash move refused in place
+    /// instead of handing it to Finder, which is an administrator password
+    /// prompt. No default: each caller says whether someone is there to answer.
+    func cleanSelected(escalate: Bool) {
+        let chosen = items.filter(\.include)
+        guard !chosen.isEmpty else { return }
+        phase = .cleaning
+
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let fm = FileManager.default
+            var freed: Int64 = 0
+            var failed = 0
+            var stubborn: [Item] = []
+
+            // Emptying the Trash MUST come first: the row means the Trash as
+            // it was scanned. Running it after the moves would silently wipe
+            // the very items this clean just made recoverable, which reads
+            // as "nothing ever went to the Trash".
+            for item in chosen where item.category == .trash {
+                if Self.emptyTrash() { freed += item.size } else { failed += 1 }
+            }
+
+            // Emptying the Trash may have waited for Finder. Read ownership after it returns.
+            let canRemove = Self.removalCheck(for: chosen)
+            for item in chosen where item.category != .trash {
+                guard canRemove(item) else {
+                    failed += 1
+                    continue
+                }
+                do {
+                    try fm.trashItem(at: item.url, resultingItemURL: nil)
+                    freed += item.size
+                } catch {
+                    stubborn.append(item)
+                }
+            }
+
+            // Finder may wait for an administrator password after receiving the URLs.
+            // A login item can regain its owner during that wait, so leave its plist in place.
+            let candidates = escalate ? stubborn.filter { $0.category != .loginItems && canRemove($0) } : []
+            if !candidates.isEmpty, AppleScriptRunner.consentToAutomate(bundleID: "com.apple.finder") {
+                // An owner may have been installed while the consent prompt was open.
+                let stillSafe = candidates.filter(Self.removalCheck(for: candidates))
+                if !stillSafe.isEmpty {
+                    Self.trashViaFinder(stillSafe.map(\.url))
+                }
+                let removed = stillSafe.filter { UninstallerSupport.isConfirmedAbsent(at: $0.url) }
+                freed += removed.reduce(0) { $0 + $1.size }
+                failed += stubborn.count - removed.count
+            } else {
+                failed += stubborn.count
+            }
+
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.phase == .cleaning else { return }
+                self.items = []
+                self.phase = .done(freed: freed, failed: failed)
+            }
+        }
+    }
+
+    /// Exact match guard against ever removing a critical root, even if a
+    /// scanner bug produced one. Items are already scoped by construction;
+    /// this is the last line of defense.
+    private static func mayRemove(_ item: Item, installedApps: () -> Set<String>,
+                                  audioPluginIDs: Set<String>) -> Bool {
+        let url = item.url
+        let path = url.standardizedFileURL.path
+        let home = NSHomeDirectory()
+        let critical: Set<String> = [
+            "/", "/Applications", "/Library", "/System", "/Users", "/usr",
+            "/bin", "/sbin", "/etc", "/var", "/private", "/opt",
+            home, home + "/Library", home + "/Documents", home + "/Desktop",
+            home + "/Downloads", home + "/Pictures", home + "/Music", home + "/Movies",
+        ]
+        guard !critical.contains(path),
+              !url.lastPathComponent.lowercased().hasSuffix(".localized"),
+              let expectedIdentity = item.fileIdentity,
+              UninstallerSupport.fileIdentity(at: url) == expectedIdentity,
+              !UninstallerSupport.isSymbolicLink(url),
+              url.resolvingSymlinksInPath().standardizedFileURL.path == path else { return false }
+        let parent = url.deletingLastPathComponent()
+        let isLeftoverCache = item.category == .leftovers && parent.lastPathComponent == "Caches"
+        if item.category == .caches || isLeftoverCache {
+            guard !CleanerPolicy.isExcludedCacheEntry(url.lastPathComponent,
+                                                      audioPluginIDs: audioPluginIDs) else { return false }
+        }
+        // A plugin alone cannot justify a recommendation that a fresh scan
+        // would now offer as an unchecked leftover.
+        if [.caches, .logs].contains(item.category), item.recommended, !audioPluginIDs.isEmpty,
+           let owner = leftoverOwner(entry: url.lastPathComponent, url: url, usesContainerMetadata: false),
+           !CleanerSupport.isProtectedBundleID(owner),
+           CleanerSupport.isOwned(candidate: owner, byInstalled: audioPluginIDs)
+               || CleanerSupport.sharesVendorNamespace(candidate: owner, withInstalled: audioPluginIDs),
+           !hasLivingOwner(owner, installed: installedApps()) { return false }
+        if item.category == .leftovers {
+            let apps = installedApps()
+            let installed = usesAppOwnersForLeftovers(in: parent) ? apps : apps.union(audioPluginIDs)
+            guard isDirectLeftoverRootChild(url),
+                  CleanerSupport.isAttributableBundleID(item.detail),
+                  !CleanerSupport.isProtectedBundleID(item.detail),
+                  !hasLivingLeftoverOwner(item.detail, at: url, installed: installed) else { return false }
+        }
+        if item.category == .loginItems {
+            // Only move the selected plist. launchd may have loaded another file with the same label.
+            let installed = installedApps().union(audioPluginIDs)
+            guard orphanedLaunchPlistDetail(at: url, installed: installed) == item.detail else { return false }
+        }
+        if item.category == .screenshots {
+            guard isScreenshotFolderChild(url), isScreenCapture(url) else { return false }
+        }
+        // Depth guard: anything this shallow is a root of some kind, never junk.
+        return url.pathComponents.count >= 4
+    }
+
+    private static func trashViaFinder(_ urls: [URL]) {
+        let targets = urls
+            .map { "set end of targets to POSIX file \(AppleScriptRunner.literal($0.path))" }
+            .joined(separator: "\n")
+        let source = """
+        set targets to {}
+        \(targets)
+        tell application "Finder" to delete targets
+        """
+        _ = AppleScriptRunner.run(source)
+    }
+
+    /// Emptying the Trash is the one permanent action here, clearly labeled
+    /// in the interface. Finder owns it, exactly like the menu command.
+    private static func emptyTrash() -> Bool {
+        guard AppleScriptRunner.consentToAutomate(bundleID: "com.apple.finder") else { return false }
+        return AppleScriptRunner.run("tell application \"Finder\" to empty trash").ok
+    }
+
+    // MARK: - Installed apps oracle
+
+    /// Every bundle identifier that must be treated as
+    /// alive: apps found in the application folders (three levels deep,
+    /// covering subfolders and suites), everything currently running, and
+    /// login item helpers nested inside those apps.
+    private static func installedBundleIDs() -> Set<String> {
+        var ids = Set<String>()
+        let fm = FileManager.default
+        let roots = ["/Applications", "/System/Applications",
+                     NSHomeDirectory() + "/Applications"]
+
+        func remember(app url: URL) {
+            if let id = Bundle(url: url)?.bundleIdentifier {
+                ids.insert(id.lowercased())
+            }
+        }
+
+        func collect(at url: URL, depth: Int) {
+            guard depth > 0 else { return }
+            let keys: Set<URLResourceKey> = [.isDirectoryKey, .isSymbolicLinkKey]
+            guard let entries = try? fm.contentsOfDirectory(at: url,
+                                                            includingPropertiesForKeys: Array(keys),
+                                                            options: [.skipsHiddenFiles]) else { return }
+            for entry in entries {
+                let values = try? entry.resourceValues(forKeys: keys)
+                guard values?.isSymbolicLink != true, values?.isDirectory == true else { continue }
+                if entry.pathExtension.caseInsensitiveCompare("app") == .orderedSame {
+                    remember(app: entry)
+                    collect(at: entry.appendingPathComponent("Contents/Library/LoginItems"), depth: 1)
+                } else {
+                    collect(at: entry, depth: depth - 1)
+                }
+            }
+        }
+
+        for root in roots {
+            collect(at: URL(fileURLWithPath: root), depth: 3)
+        }
+        for app in NSWorkspace.shared.runningApplications {
+            if let id = app.bundleIdentifier { ids.insert(id.lowercased()) }
+            if let url = app.bundleURL { remember(app: url) }
+        }
+        return ids
+    }
+
+    /// Audio plugins are not apps, yet they keep preferences, support data
+    /// and licenses under their own identifiers. An installed plugin is a
+    /// living owner like an app; without it, a plugin's license reads as the
+    /// leftover of an uninstalled app.
+    private static func installedAudioPluginBundleIDs() -> Set<String> {
+        let extensions: Set<String> = ["component", "vst", "vst3", "clap", "aaxplugin"]
+        let roots = [NSHomeDirectory() + "/Library", systemLibrary].flatMap {
+            [$0 + "/Audio/Plug-Ins", $0 + "/Application Support/Avid/Audio/Plug-Ins"]
+        }
+        var ids = Set<String>()
+        for root in roots {
+            guard let enumerator = FileManager.default.enumerator(
+                at: URL(fileURLWithPath: root, isDirectory: true),
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
+            for case let url as URL in enumerator {
+                guard extensions.contains(url.pathExtension.lowercased()),
+                      let id = Bundle(url: url)?.bundleIdentifier else { continue }
+                ids.insert(id.lowercased())
+            }
+        }
+        return ids
+    }
+
+    /// The final say on whether a candidate identifier has a living owner:
+    /// the collected set (family match), the vendor namespace rule (suites
+    /// and updaters share a namespace with sibling identifiers), and Launch
+    /// Services, which knows apps registered anywhere on disk.
+    private static func hasLivingOwner(_ candidate: String, installed: Set<String>) -> Bool {
+        if CleanerSupport.isOwned(candidate: candidate, byInstalled: installed) { return true }
+        if CleanerSupport.sharesVendorNamespace(candidate: candidate, withInstalled: installed) { return true }
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: candidate) != nil
+    }
+
+    private static func hasLivingLeftoverOwner(_ owner: String, at url: URL, installed: Set<String>) -> Bool {
+        if hasLivingOwner(owner, installed: installed) { return true }
+        let isSupportEntry = [NSHomeDirectory() + "/Library", systemLibrary].contains { library in
+            let support = URL(fileURLWithPath: library + "/Application Support", isDirectory: true)
+            return CleanerSupport.isDirectChild(url, of: support)
+        }
+        guard isSupportEntry,
+              CleanerSupport.isOwnedSupportDomain(url.lastPathComponent, byInstalled: installed) else { return false }
+        // A confirmed file remains eligible. Keep the entry if its type cannot be read.
+        return (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) != false
+    }
+
+    // MARK: - Category scanners
+
+    private static let systemLibrary = "/Library"
+
+    /// Library locations where uninstalled apps leave data behind. Only direct
+    /// children are eligible. A selected app's Uninstaller can prove deeper
+    /// ownership; the general Cleaner cannot safely infer it.
+    private static let leftoverRoots: [(path: String, usesContainerMetadata: Bool)] = [
+        ("Application Support", false),
+        ("Caches", false),
+        ("Preferences", false),
+        ("Preferences/ByHost", false),
+        ("Saved Application State", false),
+        ("HTTPStorages", false),
+        ("WebKit", false),
+        ("Logs", false),
+        ("Containers", true),
+        ("Cookies", false),
+        ("PreferencePanes", false),
+        ("Internet Plug-Ins", false),
+        ("Services", false),
+        ("QuickLook", false),
+        ("Spotlight", false),
+        ("Input Methods", false),
+        ("Screen Savers", false),
+        ("ColorPickers", false),
+        ("Widgets", false),
+        ("Address Book Plug-Ins", false),
+        ("Contextual Menu Items", false),
+        ("Safari/Extensions", false),
+        ("Automator", false),
+        ("CoreImage", false),
+        ("Dictionaries", false),
+        ("Components", false),
+        ("Audio/Plug-Ins", false),
+    ]
+
+    private static func isDirectLeftoverRootChild(_ url: URL) -> Bool {
+        [NSHomeDirectory() + "/Library", systemLibrary].contains { library in
+            leftoverRoots.contains { root in
+                CleanerSupport.isDirectChild(
+                    url,
+                    of: URL(fileURLWithPath: library + "/" + root.path, isDirectory: true)
+                )
+            }
+        }
+    }
+
+    /// Plugin caches have a separate exclusion. The user log scanner recommends
+    /// eligible unclaimed entries, so only apps can establish ownership there.
+    private static func usesAppOwnersForLeftovers(in directory: URL) -> Bool {
+        if directory.lastPathComponent == "Caches" { return true }
+        guard directory.lastPathComponent == "Logs" else { return false }
+        let userLibrary = URL(fileURLWithPath: NSHomeDirectory() + "/Library", isDirectory: true)
+        return CleanerSupport.isDirectChild(directory, of: userLibrary)
+    }
+
+    private static func scanLeftovers(installedApps: Set<String>, audioPluginIDs: Set<String>) -> [Item] {
+        let fm = FileManager.default
+        let libraries = [NSHomeDirectory() + "/Library", systemLibrary]
+        let installed = installedApps.union(audioPluginIDs)
+        var found: [Item] = []
+        for library in libraries {
+            for root in leftoverRoots {
+                let dir = URL(fileURLWithPath: library + "/" + root.path, isDirectory: true)
+                let owners = usesAppOwnersForLeftovers(in: dir) ? installedApps : installed
+                appendLeftovers(in: dir,
+                                usesContainerMetadata: root.usesContainerMetadata,
+                                installed: owners,
+                                audioPluginIDs: audioPluginIDs,
+                                fm: fm,
+                                into: &found)
+            }
+        }
+        return sorted(found)
+    }
+
+    private static func appendLeftovers(in root: URL,
+                                        usesContainerMetadata: Bool,
+                                        installed: Set<String>,
+                                        audioPluginIDs: Set<String>,
+                                        fm: FileManager,
+                                        into found: inout [Item]) {
+        let keys: Set<URLResourceKey> = [.isSymbolicLinkKey]
+        guard let entries = try? fm.contentsOfDirectory(at: root,
+                                                        includingPropertiesForKeys: Array(keys),
+                                                        options: []) else { return }
+        let isCacheRoot = root.lastPathComponent == "Caches"
+        for url in entries {
+            let entry = url.lastPathComponent
+            guard !entry.hasPrefix(".") else { continue }
+            if isCacheRoot && CleanerPolicy.isExcludedCacheEntry(entry, audioPluginIDs: audioPluginIDs) { continue }
+            let values = try? url.resourceValues(forKeys: keys)
+            guard values?.isSymbolicLink != true else { continue }
+            if let owner = leftoverOwner(entry: entry, url: url,
+                                         usesContainerMetadata: usesContainerMetadata) {
+                if CleanerSupport.isProtectedBundleID(owner)
+                    || hasLivingLeftoverOwner(owner, at: url, installed: installed) {
+                    continue
+                }
+                found.append(Item(url: url, category: .leftovers,
+                                  size: directorySize(of: url, fm: fm),
+                                  detail: owner,
+                                  recommended: CleanerPolicy.precheckLeftovers))
+            }
+        }
+    }
+
+    private static func leftoverOwner(entry: String,
+                                      url: URL,
+                                      usesContainerMetadata: Bool) -> String? {
+        // Finder uses this suffix for display names, not application ownership.
+        guard !entry.lowercased().hasSuffix(".localized") else { return nil }
+        if usesContainerMetadata, let owner = containerOwner(at: url) {
+            return owner
+        }
+        guard !CleanerSupport.hasSharedContainerWrapper(entry) else { return nil }
+        return CleanerSupport.bundleIDCandidate(fromEntryName: entry)
+    }
+
+    /// The owning bundle identifier of a container folder, from the metadata
+    /// the container manager writes inside it.
+    private static func containerOwner(at url: URL) -> String? {
+        let metadata = url.appendingPathComponent(".com.apple.containermanagerd.metadata.plist")
+        guard let dict = NSDictionary(contentsOf: metadata),
+              let owner = dict["MCMMetadataIdentifier"] as? String,
+              !CleanerSupport.hasSharedContainerWrapper(owner) else { return nil }
+        return CleanerSupport.bundleIDCandidate(fromEntryName: owner)
+    }
+
+    /// Launch agents and daemons whose every referenced executable is gone
+    /// and whose label has no living owner: the classic ghost that keeps a
+    /// deleted app listed under Login Items and Extensions.
+    private static func scanOrphanedLaunchPlists(installed: Set<String>) -> [Item] {
+        let fm = FileManager.default
+        let roots = [NSHomeDirectory() + "/Library/LaunchAgents",
+                     systemLibrary + "/LaunchAgents",
+                     systemLibrary + "/LaunchDaemons"]
+        var found: [Item] = []
+        for root in roots {
+            guard let entries = try? fm.contentsOfDirectory(atPath: root) else { continue }
+            for entry in entries where entry.hasSuffix(".plist") {
+                let url = URL(fileURLWithPath: root).appendingPathComponent(entry)
+                guard !UninstallerSupport.isSymbolicLink(url),
+                      let detail = orphanedLaunchPlistDetail(at: url, installed: installed) else { continue }
+                found.append(Item(url: url, category: .loginItems,
+                                  size: directorySize(of: url, fm: fm),
+                                  detail: detail,
+                                  recommended: CleanerPolicy.precheckLoginItems))
+            }
+        }
+        return sorted(found)
+    }
+
+    /// Reads the current plist so a selected job must still qualify at cleanup.
+    private static func orphanedLaunchPlistDetail(at url: URL, installed: Set<String>) -> String? {
+        guard let plist = NSDictionary(contentsOf: url) as? [String: Any] else { return nil }
+        let label = plist["Label"] as? String
+        let executables = CleanerSupport.executablePaths(inLaunchPlist: plist)
+        guard CleanerSupport.launchPlistIsRemovableOrphan(
+            label: label,
+            executables: executables,
+            executableIsConfirmedAbsent: { path in
+                UninstallerSupport.isConfirmedAbsent(at: URL(fileURLWithPath: path, isDirectory: false))
+            }
+        ) else { return nil }
+        if let label, hasLivingOwner(label, installed: installed) { return nil }
+        return label ?? url.lastPathComponent
+    }
+
+    private static func scanCaches(excluding claimed: Set<String>, audioPluginIDs: Set<String>) -> [Item] {
+        let fm = FileManager.default
+        let dir = NSHomeDirectory() + "/Library/Caches"
+        guard let entries = try? fm.contentsOfDirectory(atPath: dir) else { return [] }
+        var found: [Item] = []
+        for entry in entries where !entry.hasPrefix(".") {
+            guard !CleanerPolicy.isExcludedCacheEntry(entry, audioPluginIDs: audioPluginIDs) else { continue }
+            let url = URL(fileURLWithPath: dir).appendingPathComponent(entry)
+            guard !claimed.contains(url.standardizedFileURL.path) else { continue }
+            let size = directorySize(of: url, fm: fm)
+            guard size > 0 else { continue }
+            found.append(Item(url: url, category: .caches, size: size,
+                              detail: entry,
+                              recommended: CleanerPolicy.precheckCacheEntry(entry, audioPluginIDs: audioPluginIDs)))
+        }
+        return sorted(found)
+    }
+
+    private static func scanLogs(excluding claimed: Set<String>) -> [Item] {
+        let fm = FileManager.default
+        var found: [Item] = []
+        let logsDir = NSHomeDirectory() + "/Library/Logs"
+        if let entries = try? fm.contentsOfDirectory(atPath: logsDir) {
+            for entry in entries where entry != "DiagnosticReports"
+                && !entry.hasPrefix(".")
+                && !CleanerPolicy.isExcludedCacheEntry(entry) {
+                let url = URL(fileURLWithPath: logsDir).appendingPathComponent(entry)
+                guard !claimed.contains(url.standardizedFileURL.path) else { continue }
+                let size = directorySize(of: url, fm: fm)
+                guard size > 0 else { continue }
+                found.append(Item(url: url, category: .logs, size: size,
+                                  detail: entry, recommended: CleanerPolicy.precheckLogs))
+            }
+        }
+        let reports = logsDir + "/DiagnosticReports"
+        let reportsURL = URL(fileURLWithPath: reports)
+        let reportsSize = directorySize(of: reportsURL, fm: fm)
+        if reportsSize > 0 {
+            found.append(Item(url: reportsURL, category: .logs, size: reportsSize,
+                              detail: "DiagnosticReports", recommended: CleanerPolicy.precheckLogs))
+        }
+        return sorted(found)
+    }
+
+    private static func scanDeveloperJunk() -> [Item] {
+        let fm = FileManager.default
+        var found: [Item] = []
+        for path in CleanerPolicy.developerJunkPaths {
+            let url = URL(fileURLWithPath: NSHomeDirectory() + path)
+            guard fm.fileExists(atPath: url.path) else { continue }
+            let size = directorySize(of: url, fm: fm)
+            guard size > 0 else { continue }
+            found.append(Item(url: url, category: .developer, size: size,
+                              detail: url.lastPathComponent,
+                              recommended: CleanerPolicy.precheckDeveloper))
+        }
+        return sorted(found)
+    }
+
+    /// Old iPhone and iPad backups under MobileSync: with caches, the other
+    /// classic tenant of the storage macOS files under "Other". They are the
+    /// user's safety net, so every find starts unchecked and names the
+    /// device and the backup date. Without Full Disk Access the folder is
+    /// unreadable and nothing is offered.
+    private static func scanDeviceBackups() -> [Item] {
+        let fm = FileManager.default
+        let root = NSHomeDirectory() + "/Library/Application Support/MobileSync/Backup"
+        guard let entries = try? fm.contentsOfDirectory(atPath: root) else { return [] }
+        var found: [Item] = []
+        for entry in entries where !entry.hasPrefix(".") {
+            let url = URL(fileURLWithPath: root).appendingPathComponent(entry)
+            var isDirectory: ObjCBool = false
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else { continue }
+            let size = directorySize(of: url, fm: fm)
+            guard size > 0 else { continue }
+            let info = NSDictionary(contentsOf: url.appendingPathComponent("Info.plist"))
+            let device = info?["Device Name"] as? String
+            let date = (info?["Last Backup Date"] as? Date).map {
+                DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .none)
+            }
+            let detail = [device, date].compactMap { $0 }.joined(separator: ", ")
+            found.append(Item(url: url, category: .deviceBackups, size: size,
+                              detail: detail.isEmpty ? entry : detail,
+                              recommended: CleanerPolicy.precheckDeviceBackups))
+        }
+        return sorted(found)
+    }
+
+    /// The folders and age of the forgotten screenshot search, or nil when
+    /// the user turned it off.
+    private static func screenshotSearch() -> (folders: [URL], days: Int)? {
+        let days = CleanerPolicy.sanitizedScreenshotAgeDays(
+            UserDefaults.standard.integer(forKey: DefaultsKey.cleanerScreenshotAgeDays))
+        guard days > 0 else { return nil }
+        return (screenshotFolders(), days)
+    }
+
+    /// Where macOS saves screenshots and, when its screenshot tool is
+    /// installed, where this app saves its own.
+    private static func screenshotFolders() -> [URL] {
+        let home = NSHomeDirectory()
+        let location = CFPreferencesCopyAppValue("location" as CFString,
+                                                 "com.apple.screencapture" as CFString) as? String
+        var paths = [CleanerSupport.screenshotFolder(location: location, home: home)]
+        if AppFeature.screenshot.isAvailable {
+            let stored = UserDefaults.standard.string(forKey: DefaultsKey.screenshotSaveFolder) ?? ""
+            paths.append(stored.isEmpty ? home + "/Desktop" : (stored as NSString).expandingTildeInPath)
+        }
+        var seen = Set<String>()
+        return paths
+            // The real path: the removal guard refuses anything reached
+            // through a symbolic link.
+            .map { URL(fileURLWithPath: $0, isDirectory: true).resolvingSymlinksInPath().standardizedFileURL }
+            .filter { seen.insert($0.path).inserted }
+    }
+
+    private static func isScreenshotFolderChild(_ url: URL) -> Bool {
+        screenshotFolders().contains { CleanerSupport.isDirectChild(url, of: $0) }
+    }
+
+    /// Screenshots nobody touched for `days`: only the top level of the
+    /// screenshot folders, only files macOS itself marked as captures, and
+    /// only under the dated name they were saved with. Moving or renaming
+    /// one is a decision about it, so it never shows up again. Without
+    /// access to a folder nothing from it is offered.
+    private static func scanScreenshots(in folders: [URL], days: Int) -> [Item] {
+        let fm = FileManager.default
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey,
+                                         .creationDateKey, .contentModificationDateKey]
+        let now = Date()
+        var found: [Item] = []
+        for folder in folders {
+            guard let entries = try? fm.contentsOfDirectory(at: folder,
+                                                            includingPropertiesForKeys: Array(keys),
+                                                            options: [.skipsHiddenFiles]) else { continue }
+            for url in entries {
+                guard let values = try? url.resourceValues(forKeys: keys),
+                      values.isRegularFile == true, values.isSymbolicLink != true,
+                      let created = values.creationDate,
+                      isScreenCapture(url),
+                      CleanerSupport.screenshotKeepsDefaultName(url.lastPathComponent,
+                                                                created: created) else { continue }
+                let lastUsed = extendedAttribute(CleanerSupport.lastUsedDateAttribute, of: url)
+                    .flatMap(CleanerSupport.lastUsedDate(fromAttribute:))
+                guard CleanerSupport.isForgottenScreenshot(created: created,
+                                                           modified: values.contentModificationDate,
+                                                           lastUsed: lastUsed,
+                                                           now: now, days: days) else { continue }
+                let size = fileSize(url)
+                guard size > 0 else { continue }
+                found.append(Item(url: url, category: .screenshots, size: size,
+                                  detail: DateFormatter.localizedString(from: created,
+                                                                        dateStyle: .medium,
+                                                                        timeStyle: .none),
+                                  recommended: CleanerPolicy.precheckScreenshots))
+            }
+        }
+        return sorted(found)
+    }
+
+    private static func isScreenCapture(_ url: URL) -> Bool {
+        extendedAttribute(CleanerSupport.screenCaptureAttribute, of: url)
+            .map(CleanerSupport.isScreenCaptureFlag) ?? false
+    }
+
+    private static func extendedAttribute(_ name: String, of url: URL) -> Data? {
+        url.withUnsafeFileSystemRepresentation { path -> Data? in
+            guard let path else { return nil }
+            let length = getxattr(path, name, nil, 0, 0, XATTR_NOFOLLOW)
+            guard length > 0, length <= 4096 else { return nil }
+            var data = Data(count: length)
+            let read = data.withUnsafeMutableBytes {
+                getxattr(path, name, $0.baseAddress, length, 0, XATTR_NOFOLLOW)
+            }
+            return read == length ? data : nil
+        }
+    }
+
+    private static func scanTrash() -> [Item] {
+        let fm = FileManager.default
+        let trash = NSHomeDirectory() + "/.Trash"
+        // Only what the user can see in the Trash counts: an "empty" Trash
+        // still carries hidden bookkeeping files (.DS_Store), and offering
+        // to empty those reads as a lie.
+        guard let entries = try? fm.contentsOfDirectory(atPath: trash) else { return [] }
+        let visible = entries.filter { !$0.hasPrefix(".") }
+        guard !visible.isEmpty else { return [] }
+        let url = URL(fileURLWithPath: trash)
+        let size = visible.reduce(Int64(0)) {
+            $0 + directorySize(of: url.appendingPathComponent($1), fm: fm)
+        }
+        guard size > 0 else { return [] }
+        return [Item(url: url, category: .trash, size: size,
+                     detail: "", recommended: false)]
+    }
+
+    // MARK: - Helpers
+
+    private static func sorted(_ items: [Item]) -> [Item] {
+        items.sorted { $0.size > $1.size }
+    }
+
+    private static func directorySize(of url: URL, fm: FileManager) -> Int64 {
+        if UninstallerSupport.isSymbolicLink(url) { return 0 }
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { return 0 }
+        if !isDir.boolValue { return fileSize(url) }
+        var total: Int64 = 0
+        if let enumerator = fm.enumerator(at: url,
+                                          includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey],
+                                          options: [], errorHandler: nil) {
+            for case let item as URL in enumerator {
+                if UninstallerSupport.isSymbolicLink(item) {
+                    continue
+                }
+                total += fileSize(item)
+            }
+        }
+        return total
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey])
+        return Int64(values?.totalFileAllocatedSize ?? values?.fileAllocatedSize ?? 0)
+    }
+}

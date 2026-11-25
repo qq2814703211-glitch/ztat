@@ -1,0 +1,112 @@
+{
+  "schemaVersion": 1,
+  "project": "ztat",
+  "bundleIdentifier": "dev.ztat.app",
+  "license": "GPL-3.0-or-later",
+  "lastUpdated": "2026-11-25",
+  "upstreams": {
+    "vorssaint-utils": {
+      "url": "https://github.com/vorssaint/vorssaint-utils.git",
+      "branch": "main",
+      "commit": "0f0fdd91eb80e509f737f2c4c1f8630b707f6537",
+      "describe": "v3.4.5-1-g0f0fdd9",
+      "license": "GPL-3.0-or-later",
+      "integrationMode": "modular-vendored-source",
+      "targetPath": "Packages/ZtatVorssaint",
+      "excludedFeatures": [
+        "monitorCPU",
+        "monitorGPU",
+        "monitorMemory",
+        "monitorNetwork",
+        "monitorDisk",
+        "monitorPower",
+        "connectedDevices",
+        "fanControl",
+        "keepAwake",
+        "standaloneMenuBarItem"
+      ],
+      "ztatPatches": [
+        "Rebrand identity/defaults/trademarks per upstream TRADEMARKS.md (no Vorssaint name/logo/update feed)",
+        "Disable standalone Vorssaint NSStatusItem and metricStatusItems (hosted inside ZtatHubPanel via ZtatVorssaintHost)",
+        "Remove overlapping monitor*, fanControl, and keepAwake panel tabs (delegated to ZtatStats & ZtatPowerGuard)",
+        "Route Dynamic Island Keep-Awake strip & toggles to ZtatPowerGuard",
+        "Fix applicationWillTerminate singleton instantiation storm via loaded-service tracking",
+        "Consolidate duplicate 0.8s pasteboard polling timers via ZtatCore.SharedPasteboardMonitor",
+        "Debounce global UserDefaults.didChangeNotification scans in Permissions"
+      ]
+    },
+    "status-trio": {
+      "url": "https://github.com/lingyired/status-trio.git",
+      "branch": "main",
+      "commit": "8cb6964aaba540efeda10564c61c6a552d5f4d0d",
+      "describe": "v1.10.5-40-g8cb6964",
+      "license": "Apache-2.0",
+      "integrationMode": "modular-vendored-source",
+      "targetPath": "Packages/ZtatStatusTrio",
+      "excludedComponents": [
+        "Sparkle auto-updater",
+        "Telemetry production endpoint (telemetry.lingai.net)",
+        "Standalone StatusTrioPowerHelper daemon (sleep control delegated to ZtatPowerGuard)",
+        "Optional MobileBatteryHelper LGPL dylib stack"
+      ],
+      "ztatPatches": [
+        "Split StatusBarController to accept ZtatHubPanelContentProviding factory for unified ztat Liquid Glass hub panel",
+        "Parameterize AnchoredStatusPanel width (default 356pt) for unified multi-module hub without horizontal clipping",
+        "Eliminate double-rendering and draw-time re-rasterization in StatusIconRenderer.image",
+        "Switch StatusBarChargingFrameCache to lazy per-step frame rendering to eliminate 36-frame MainActor stall",
+        "Add scratch CGContext pool and outer-inward ink scan in StatusIconRenderer",
+        "Pre-filter global .mouseMoved hover events by menu bar bounding strip (>95% idle CPU reduction)",
+        "Move DockVisibilityMonitor CGWindowListCopyWindowInfo off MainActor and skip when Dock autohide is off",
+        "Fix redundant Localization() instance allocation in AirPodsSystemControls"
+      ]
+    },
+    "stats": {
+      "url": "https://github.com/exelban/stats.git",
+      "branch": "master",
+      "commit": "064445c8eaf3f822b205554d64c4ee0877ec6665",
+      "describe": "v3.1.1-4-g064445c",
+      "license": "MIT",
+      "integrationMode": "pure-spm-port",
+      "targetPath": "Packages/ZtatStats",
+      "excludedComponents": [
+        "Stats/AppDelegate.swift (replaced by ZtatStatsHost.StatsEngine)",
+        "Kit/lldb/libleveldb.a & lldb.m (replaced by lightweight pure-Swift StatsStoreCache)",
+        "Kit/plugins/Updater.swift & SystemStats.swift (cloud MQTT)",
+        "Modules/Remote",
+        "WidgetsExtension.appex, LaunchAtLogin.app, SMC/Helper"
+      ],
+      "ztatPatches": [
+        "Consolidate CPU/GPU/Sensors IOReport + IOHID + Disk SMART C/ObjC headers into single CStatsHardware Clang target",
+        "Compile SMC/smc.swift once in StatsKit instead of 4 duplicate copies",
+        "Replace LevelDB + 60s fsync timer with pure-Swift debounced JSON persistence (preserves Network totals across restarts)",
+        "Isolate Store in dedicated UserDefaults suite (dev.ztat.app.stats) and prefix all NSStatusItem autosaveName & Notification.Name keys",
+        "Replace Bundle(for:) & TeamId & NSImage force-unwraps with Bundle.module safe lookups",
+        "Replace 15s /usr/bin/uptime fork in CPU/AverageLoadReader with POSIX getloadavg()",
+        "Gate Net/ConnectivityReader and Disk/SMARTReader when unused/closed",
+        "Defer SystemKit system_profiler/diskutil hardware discovery off startup critical path",
+        "Quantize Mini widget setValue redraws to formatted visual output and avoid double allocations",
+        "Zero-idle startup: no AppIcon fallback item, no auto-opening SettingsWindow when 0 metrics active"
+      ]
+    },
+    "budhold": {
+      "url": "https://github.com/budwk/budhold.git",
+      "branch": "main",
+      "commit": "add20255c430be4155023c3864313048cabd36bc",
+      "describe": "v1.0.1",
+      "license": "All-Rights-Reserved (no OSS license file — CLEAN-ROOM REIMPLEMENTATION ONLY)",
+      "integrationMode": "clean-room-feature-reference",
+      "targetPath": "Packages/ZtatPowerGuard",
+      "excludedComponents": [
+        "ZERO source files copied from budhold due to absence of open-source LICENSE"
+      ],
+      "ztatPatches": [
+        "Clean-room implementation of Remote-Ready Clamshell Lock + Physical 0% Backlight Blackout + Framebuffer Wake Guard + Live 2x2 Hardware Telemetry + Activity Log + CLI (ztat-hold)",
+        "Event-driven IOPMrootDomain & IOPS observers (eliminates 2.5s main-thread sudo/pmset fork & menu rebuild)",
+        "Least-privilege #uid scoped sudoers (disablesleep 0/1 only) with atomic visudo validation",
+        "Crash-safe UserDefaults persistence for disablesleep ownership and pre-blackout brightness",
+        "Leak-free reusable IOPMAssertionDeclareUserActivity ID, zero orphaned caffeinate children, IOPMSleepSystem closed-lid enforcement",
+        "Built-in display targeting (CGDisplayIsBuiltin) + 3-tier DisplayServices/CoreDisplay/IODisplayConnect fallback + Carbon hotkey recovery"
+      ]
+    }
+  }
+}

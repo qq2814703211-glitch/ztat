@@ -1,0 +1,310 @@
+import AppKit
+import Combine
+import SwiftUI
+import os
+
+@MainActor
+final class SettingsWindowController: NSWindowController, NSWindowDelegate {
+    private let store: SettingsStore
+    private let statusStore: SystemStatusStore
+    private let chargingEffectClock: ChargingEffectClock
+    private let localization: Localization
+    private let inputSourceController: InputSourceController
+    private let globalShortcutController: GlobalShortcutController?
+    private let chargeToFullNow: ChargeToFullNowController?
+    private let activationPolicy: AppActivationPolicy
+    private let showIconGuide: () -> Void
+    private let backgroundUITesting: BackgroundUITestingConfiguration
+    private let presentWindow: @MainActor (NSWindow, SettingsWindowPresentation) -> Void
+    private var localizationCancellable: AnyCancellable?
+    private var authorizationCancellable: AnyCancellable?
+    private var ownsActivationPolicy = false
+    private var previewVisibilityObserver: ((Bool) -> Void)?
+    private var isPreviewWindowVisible = false
+    /// Track the published initial state as well as subsequent updates, so a
+    /// refresh of an already-known grant is not mistaken for a permission decision.
+    private var lastBluetoothAuthorization: BluetoothAuthorizationStatus
+    /// The sidebar tab a panel action asked for. Kept until `SettingsView`
+    /// takes it, because the first presentation posts its notification before
+    /// the SwiftUI view necessarily exists.
+    private var pendingSection: SettingsView.Section?
+    /// The leaf within `pendingSection` when a caller wants a specific subpage
+    /// rather than the category's default one.
+    private var pendingSubtopic: SettingsSubtopic?
+
+    init(
+        store: SettingsStore,
+        statusStore: SystemStatusStore,
+        localization: Localization,
+        activationPolicy: AppActivationPolicy,
+        showIconGuide: @escaping () -> Void,
+        chargingEffectClock: ChargingEffectClock = ChargingEffectClock(),
+        inputSourceController: InputSourceController? = nil,
+        globalShortcutController: GlobalShortcutController? = nil,
+        chargeToFullNow: ChargeToFullNowController? = nil,
+        backgroundUITesting: BackgroundUITestingConfiguration = .disabled,
+        presentWindow: @escaping @MainActor (NSWindow, SettingsWindowPresentation) -> Void = {
+            window, mode in mode.present(window)
+        }
+    ) {
+        self.store = store
+        self.statusStore = statusStore
+        self.chargingEffectClock = chargingEffectClock
+        self.localization = localization
+        self.inputSourceController = inputSourceController ?? InputSourceController()
+        self.globalShortcutController = globalShortcutController
+        self.chargeToFullNow = chargeToFullNow
+        self.activationPolicy = activationPolicy
+        self.showIconGuide = showIconGuide
+        self.backgroundUITesting = backgroundUITesting
+        self.presentWindow = presentWindow
+        self.lastBluetoothAuthorization = statusStore.bluetoothDevices.authorizationStatus
+        super.init(window: nil)
+
+        localizationCancellable = localization.$resolvedLanguage
+            .removeDuplicates()
+            .sink { [weak self] language in
+                self?.applyLocalization(language: language)
+            }
+
+        // A system Bluetooth permission prompt steals focus and can dismiss or
+        // background this window. Once the user decides, bring Settings back so
+        // they land where they were instead of hunting for the window.
+        authorizationCancellable = statusStore.bluetoothDevices.$authorizationStatus
+            .dropFirst()
+            .sink { [weak self] status in
+                guard let self else { return }
+                let wasUndetermined = self.lastBluetoothAuthorization == .notDetermined
+                self.lastBluetoothAuthorization = status
+                if wasUndetermined, status != .notDetermined {
+                    self.resurface()
+                }
+            }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func startPreviewResourceObservation(_ observer: @escaping (Bool) -> Void) {
+        guard previewVisibilityObserver == nil else { return }
+        previewVisibilityObserver = observer
+        observer(isPreviewWindowVisible)
+    }
+
+    func stopPreviewResourceObservation() {
+        guard previewVisibilityObserver != nil else { return }
+        previewVisibilityObserver = nil
+    }
+
+    func show() {
+        show(section: nil)
+    }
+
+    /// Shows the window and, when requested, reveals one sidebar tab. The
+    /// status panel uses this to open the app's own battery settings.
+    func show(section: SettingsView.Section?) {
+        show(section: section, subtopic: nil)
+    }
+
+    /// Shows the window and opens one leaf subpage. Existing callers that only
+    /// know the category keep using `show(section:)`, which maps to the
+    /// category's default (or last visited) leaf.
+    func show(subtopic: SettingsSubtopic) {
+        show(section: subtopic.section, subtopic: subtopic)
+    }
+
+    func show(section: SettingsView.Section?, subtopic: SettingsSubtopic?) {
+        if let section {
+            pendingSection = section
+            pendingSubtopic = subtopic?.section == section ? subtopic : nil
+        }
+        dockActivationLogger.notice("Settings.show existing=\(self.window != nil)")
+        let window = window ?? makeWindow()
+        self.window = window
+        statusStore.setSettingsVisible(true)
+        applyLocalization()
+        if !backgroundUITesting.isEnabled {
+            enterActivationPolicyIfNeeded()
+        } else {
+            BackgroundUIWindowPlacement.position(window, display: backgroundUITesting.display)
+        }
+        // The user may have approved the power helper in System Settings since
+        // the last look; refresh so the toggle and its approval note are current.
+        presentWindow(window, backgroundUITesting.isEnabled ? .background : .activating)
+        if backgroundUITesting.isEnabled {
+            let displayID = (window.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+                as? NSNumber)?.uint32Value ?? 0
+            dockActivationLogger.notice(
+                """
+                Settings.background requestedDisplay=\(self.backgroundUITesting.display.rawValue, privacy: .public) \
+                displayID=\(displayID) \(dockActivationFocusSnapshot(window: window), privacy: .public)
+                """
+            )
+        }
+        setPreviewWindowVisible(true)
+        if pendingSection != nil {
+            NotificationCenter.default.post(name: .settingsSelectSection, object: nil)
+        }
+    }
+
+    /// Called by `SettingsView` on appear and when the tab notification fires.
+    func takePendingSection() -> SettingsView.Section? {
+        defer { pendingSection = nil }
+        return pendingSection
+    }
+
+    /// The leaf requested alongside `takePendingSection`, if any.
+    func takePendingSubtopic() -> SettingsSubtopic? {
+        defer { pendingSubtopic = nil }
+        return pendingSubtopic
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        globalShortcutController?.endRecording()
+        statusStore.setSettingsVisible(false)
+        leaveActivationPolicyIfNeeded()
+        setPreviewWindowVisible(false)
+        window = nil
+    }
+
+    /// Re-fronts an existing Settings window after a system permission dialog.
+    /// Reading Bluetooth authorization for the first popover also publishes a
+    /// transition from `.notDetermined`; it must never create a Settings window
+    /// or reopen one the user has closed.
+    func resurface() {
+        guard let window else { return }
+        guard !backgroundUITesting.isEnabled else {
+            dockActivationLogger.notice("Settings.resurface suppressed for background UI testing")
+            return
+        }
+        // Opening the status panel can publish the first authorization read.
+        // Settings must not steal that user interaction or dismiss its panel.
+        guard !statusStore.isPopoverVisible else {
+            dockActivationLogger.notice("Settings.resurface suppressed while status popover is visible")
+            return
+        }
+        dockActivationLogger.notice("Settings.resurface existing=true")
+        presentWindow(window, .activating)
+        setPreviewWindowVisible(true)
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) {
+        dockActivationLogger.notice(
+            """
+            Settings became key popoverVisible=\(self.statusStore.isPopoverVisible) \
+            \(dockActivationFocusSnapshot(window: self.window), privacy: .public)
+            """
+        )
+    }
+
+    func windowDidResignKey(_ notification: Notification) {
+        dockActivationLogger.notice(
+            """
+            Settings resigned key popoverVisible=\(self.statusStore.isPopoverVisible) \
+            \(dockActivationFocusSnapshot(window: self.window), privacy: .public)
+            """
+        )
+    }
+
+    /// Frame autosave key for the Settings window. Kept in one place so the
+    /// restore-on-launch path and the AppKit save path cannot drift apart.
+    static let frameAutosaveName = "SettingsWindow.Sidebar.v1"
+
+    private func makeWindow() -> NSWindow {
+        let contentSize = SettingsView.defaultContentSize(for: NSScreen.main?.visibleFrame)
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: contentSize),
+            // `.resizable` gives the green title-bar button its zoom/full-screen
+            // behaviour and lets the user drag the edges. The minimum content
+            // size keeps the fixed sidebar and detail controls from colliding
+            // (#304).
+            styleMask: [.titled, .closable, .resizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        window.contentMinSize = NSSize(
+            width: SettingsView.minimumWidth,
+            height: SettingsView.minimumHeight
+        )
+        // Standard macOS full-screen support for a resizable, titled window.
+        // Settings presents in temporary regular activation mode with the Dock
+        // visible, which full screen keeps (#304).
+        window.collectionBehavior.insert(.fullScreenPrimary)
+
+        let rootView = LocalizedRootView(localization: localization) {
+            SettingsView(
+                store: store,
+                statusStore: statusStore,
+                localization: localization,
+                inputSourceController: inputSourceController,
+                globalShortcutController: globalShortcutController,
+                chargeToFullNow: chargeToFullNow,
+                onShowIconGuide: showIconGuide,
+                consumePendingSection: { [weak self] in self?.takePendingSection() },
+                consumePendingSubtopic: { [weak self] in self?.takePendingSubtopic() }
+            )
+            .environmentObject(chargingEffectClock)
+        }
+
+        window.contentView = NSHostingView(rootView: rootView)
+        window.delegate = self
+        window.isReleasedWhenClosed = true
+        window.isMovableByWindowBackground = true
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.titlebarSeparatorStyle = .none
+        if backgroundUITesting.isEnabled {
+            // Test launches must stay deterministic: fixed default size, centred,
+            // and never touching the developer's saved Settings frame.
+            window.setContentSize(contentSize)
+            window.center()
+        } else if !window.setFrameUsingName(Self.frameAutosaveName) {
+            // First launch (no saved frame): use the default size and centre it.
+            // On later launches `setFrameUsingName` has already restored both the
+            // saved size and position, so do not overwrite them with
+            // `setContentSize`/`center` (#304).
+            window.setContentSize(contentSize)
+            window.center()
+        }
+        if !backgroundUITesting.isEnabled {
+            // Register for future saves only after restoring, so the initial
+            // default frame is not written over the user's last frame.
+            window.setFrameAutosaveName(Self.frameAutosaveName)
+        }
+        return window
+    }
+
+    private func applyLocalization(language: AppLanguage? = nil) {
+        let language = language ?? localization.resolvedLanguage
+        window?.title = localization.string(.settingsTitle, language: language)
+        window?.contentView?.userInterfaceLayoutDirection = language.nsLayoutDirection
+    }
+
+    private func enterActivationPolicyIfNeeded() {
+        guard !ownsActivationPolicy else { return }
+        ownsActivationPolicy = true
+        activationPolicy.enterTemporaryRegularMode()
+    }
+
+    private func leaveActivationPolicyIfNeeded() {
+        guard ownsActivationPolicy else { return }
+        ownsActivationPolicy = false
+        activationPolicy.leaveTemporaryRegularMode()
+    }
+
+    private func setPreviewWindowVisible(_ visible: Bool) {
+        guard isPreviewWindowVisible != visible else { return }
+        isPreviewWindowVisible = visible
+        previewVisibilityObserver?(visible)
+    }
+}
+
+extension Notification.Name {
+    /// Set by the status panel when it needs the Settings window to reveal a
+    /// particular sidebar tab (for example the app's own battery settings).
+    static let settingsSelectSection = Notification.Name(
+        "StatusTrio.settingsSelectSection"
+    )
+}

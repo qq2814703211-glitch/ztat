@@ -1,0 +1,1364 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Vorssaint
+
+import AppKit
+import CoreAudio
+import Foundation
+
+/// Pure DDC/CI helpers for the display brightness feature: packet building,
+/// reply parsing, value scaling and the display-to-service match score. No
+/// IOKit here so the unit tests cover every byte.
+enum BrightnessSupport {
+    /// A saved display number must fit the system type. Zero means no display.
+    static func restorableDisplayID(_ value: Int) -> CGDirectDisplayID? {
+        guard let id = CGDirectDisplayID(exactly: value), id != kCGNullDirectDisplay else { return nil }
+        return id
+    }
+
+    /// Launch can check the saved list before building the brightness service.
+    static func hasDisplaysToRestore(stored: [Int]?) -> Bool {
+        (stored ?? []).contains { restorableDisplayID($0) != nil }
+    }
+
+    /// Whether the island's brightness slider is on and shows the focused
+    /// display (with none focused, the first it can show).
+    static func sliderShowsFocusedDisplay(controlEnabled: Bool, shown: [UInt32], focused: UInt32?) -> Bool {
+        guard controlEnabled else { return false }
+        guard let focused else { return !shown.isEmpty }
+        return shown.contains(focused)
+    }
+
+    /// A key moves the island's level to its display only while the island
+    /// is open, where the slider shows the move; a display picked there
+    /// outlasts keys pressed while it is closed.
+    static func keyMovesFocus(islandOpen: Bool, focused: UInt32?, key: UInt32) -> Bool {
+        islandOpen && focused != key
+    }
+
+    struct DisplayTopology: Equatable {
+        let online: Set<UInt32>
+        let active: Set<UInt32>
+        /// Each mirroring display and the display it mirrors. Entering or
+        /// leaving a mirror set keeps `active` the same (see
+        /// `participatingDisplayIDs`), yet it reconfigures the displays and
+        /// resets their gamma, so it still needs a rebuild.
+        var mirrorSources: [UInt32: UInt32] = [:]
+    }
+
+    /// Opening the panel while a display scan is already running should use
+    /// that scan instead of queuing the same slow DDC work again. A changed
+    /// topology and the wake path still require a fresh rebuild.
+    static func shouldQueueRebuild(topology: DisplayTopology,
+                                   pending: DisplayTopology?,
+                                   force: Bool = false) -> Bool {
+        force || pending != topology
+    }
+
+    static func brightnessAfterRebuild(probed: Double, pending: Double?) -> Double {
+        pending ?? probed
+    }
+
+    /// VCP code for luminance in the DDC/CI standard.
+    static let luminanceCode: UInt8 = 0x10
+    /// 7-bit I2C address DDC displays listen on.
+    static let chipAddress: UInt32 = 0x37
+    /// Sub-address DDC hosts write through.
+    static let dataAddress: UInt32 = 0x51
+    /// Address that reaches the monitor through an MCDP29XX DisplayPort to
+    /// HDMI converter, which sits behind the built-in HDMI port of at least
+    /// the M1 Max MacBook Pro. The converter accepts writes to the standard
+    /// address and passes none of them on, so they report success while the
+    /// monitor never moves. The packets themselves, checksum included, stay
+    /// the same.
+    static let hdmiConverterChipAddress: UInt32 = 0xB7
+    /// EPIC provider class of a DDC service that sits behind that converter.
+    static let hdmiConverterProviderClass = "AppleDCPMCDP29XX"
+
+    /// The I2C address to speak DDC on for a service, from the provider class
+    /// its registry entry reports.
+    static func ddcChipAddress(epicProviderClass: String?) -> UInt32 {
+        epicProviderClass == hdmiConverterProviderClass ? hdmiConverterChipAddress : chipAddress
+    }
+    /// VCP code for speaker volume: the same channel the monitor's own
+    /// buttons use for the speakers built into it.
+    static let audioVolumeCode: UInt8 = 0x62
+    /// Audio mute and, on some monitors, screen blanking.
+    static let audioMuteCode: UInt8 = 0x8D
+    private static let audioMuteSupported: UInt16 = 2
+    static let mccsVersionCode: UInt8 = 0xDF
+    /// A zero high byte leaves the screen alone on both writes.
+    static let audioMutedValue: UInt16 = 1
+    static let audioUnmutedValue: UInt16 = 2
+
+    // Field-proven pacing: displays lose I2C transactions that arrive back to
+    // back, so every write waits first, reads settle longer, and failures
+    // retry after a pause instead of hammering the bus.
+    static let writePauseMicroseconds: UInt32 = 10_000
+    static let readPauseMicroseconds: UInt32 = 50_000
+    static let retryPauseMicroseconds: UInt32 = 20_000
+    static let writeCycles = 2
+    static let retryAttempts = 4
+    static let replyLength = 11
+    /// Opcode a display puts in byte 2 of a Get VCP Feature reply.
+    static let getVCPReplyOpcode: UInt8 = 0x02
+
+    /// Discovery keeps the normal number of reply chances. Every attempt but
+    /// the last sends one request before its read, so the read and retry
+    /// pauses keep those requests more than 50ms apart instead of pairing
+    /// them 10ms apart.
+    static func ddcProbeAttempts() -> Int {
+        retryAttempts + 1
+    }
+
+    /// Some monitors answer NULL until a second request arrives a few
+    /// milliseconds behind the first, which is why field implementations pair
+    /// theirs. The last discovery attempt pairs them too, before a channel
+    /// that never answered is written off and cached as write-only.
+    static func ddcProbeWriteCycles(classifyingChannel: Bool,
+                                    isFinalAttempt: Bool = false) -> Int {
+        classifyingChannel && !isFinalAttempt ? 1 : writeCycles
+    }
+
+    static let defaultKeyboardLightLevel: Float = 0.5
+    static let keyboardLightStep: Float = 1.0 / 16.0
+
+    static func keyboardLightOnLevel(lastNonzero: Float?) -> Float {
+        guard let lastNonzero, lastNonzero > 0 else { return defaultKeyboardLightLevel }
+        return min(lastNonzero, 1)
+    }
+
+    /// A slider hands over whatever the drag produced. Nothing but a finite
+    /// value inside the supported range reaches the private setter.
+    static func sliderKeyboardLightLevel(_ level: Float) -> Float? {
+        guard level.isFinite else { return nil }
+        return min(max(level, 0), 1)
+    }
+
+    static func steppedKeyboardLightLevel(current: Float, direction: Int) -> Float {
+        guard current.isFinite else { return 0 }
+        let step = direction < 0 ? -keyboardLightStep : keyboardLightStep
+        return min(max(current + step, 0), 1)
+    }
+
+    /// The DDC/CI standard also spaces whole commands apart: a host waits at
+    /// least 50ms after one command before starting the next. The pauses
+    /// above pace the steps inside a command; without this one, a slider
+    /// drag or a held brightness key chains commands at the write pause,
+    /// five times faster than monitors are promised, and some react to the
+    /// stream by dropping their signal until they are power cycled
+    /// (issue #301).
+    static let commandIntervalMicroseconds: UInt64 = 50_000
+
+    /// How long the next command must still wait, given when the previous
+    /// one to the same display finished. A first command, or a clock that
+    /// moved backwards, waits nothing.
+    static func ddcCommandDelay(nowMicroseconds: UInt64,
+                                lastCommandEndMicroseconds: UInt64?) -> UInt32 {
+        guard let last = lastCommandEndMicroseconds, last <= nowMicroseconds else { return 0 }
+        let elapsed = nowMicroseconds - last
+        guard elapsed < commandIntervalMicroseconds else { return 0 }
+        return UInt32(commandIntervalMicroseconds - elapsed)
+    }
+
+    /// Wraps a DDC payload: length-tagged header, payload, XOR checksum. The
+    /// checksum seed covers the destination and source addresses for every
+    /// packet, as DDC/CI specifies. Monitors that check it ignore a read
+    /// request without the source address and replay their previous reply,
+    /// so the luminance read never lands and the range is never learned.
+    static func packet(payload: [UInt8]) -> [UInt8] {
+        var bytes: [UInt8] = [UInt8(0x80 | (payload.count + 1)), UInt8(payload.count)]
+        bytes.append(contentsOf: payload)
+        let seed = UInt8(chipAddress << 1) ^ UInt8(dataAddress)
+        bytes.append(bytes.reduce(seed) { $0 ^ $1 })
+        return bytes
+    }
+
+    /// Set VCP Feature packet (opcode 0x03 carried in the length header).
+    static func writePacket(code: UInt8, value: UInt16) -> [UInt8] {
+        packet(payload: [code, UInt8(value >> 8), UInt8(value & 0xFF)])
+    }
+
+    /// Get VCP Feature request packet.
+    static func readRequestPacket(code: UInt8) -> [UInt8] {
+        packet(payload: [code])
+    }
+
+    /// Parses a Get VCP Feature reply: checksum first (seeded with the host
+    /// address the display answers to), then the reply opcode and the VCP
+    /// code it answers, then the big-endian maximum and current values.
+    /// Anything malformed reads as no reply. Some monitors fall one reply
+    /// behind when read too soon and hand back the previous request's
+    /// answer; checking the code keeps that from reading as this control.
+    static func parseReply(_ reply: [UInt8], code: UInt8) -> (current: UInt16, maximum: UInt16)? {
+        guard reply.count >= replyLength else { return nil }
+        let checksum = reply[0..<(reply.count - 1)].reduce(UInt8(0x50)) { $0 ^ $1 }
+        guard checksum == reply[reply.count - 1],
+              reply[2] == getVCPReplyOpcode,
+              reply[3] == 0,
+              reply[4] == code else { return nil }
+        let maximum = UInt16(reply[6]) << 8 | UInt16(reply[7])
+        let current = UInt16(reply[8]) << 8 | UInt16(reply[9])
+        return (current, maximum)
+    }
+
+    /// A display that reports no range still accepts writes; treat it as the
+    /// conventional 0-100 scale.
+    static func sanitizedMaximum(_ maximum: UInt16) -> UInt16 {
+        maximum > 0 ? maximum : 100
+    }
+
+    /// What probing a monitor's DDC channel concluded. Signal converters in
+    /// the path (USB-C to HDMI adapters, and the low end Macs whose HDMI port
+    /// is such a converter internally) reject every I2C write outright, which
+    /// tells a dead channel apart from a monitor that just answers poorly:
+    /// field hardware showed reads "succeeding" with cached EDID bytes there,
+    /// so only the write result is trustworthy.
+    enum DDCChannelOutcome: Equatable {
+        /// The monitor answered a luminance read.
+        case live
+        /// Writes are accepted but replies never come; the slider still
+        /// works, it just cannot show the monitor's own value.
+        case writeOnly
+        /// Every write was rejected: no DDC reaches this display.
+        case dead
+    }
+
+    static func channelOutcome(writeAccepted: Bool, replyParsed: Bool) -> DDCChannelOutcome {
+        if replyParsed { return .live }
+        return writeAccepted ? .writeOnly : .dead
+    }
+
+    /// Identifies one physical monitor on one connection path. A monitor may
+    /// answer DDC directly but become write-only behind a particular hub, so
+    /// neither the display fingerprint nor the port is sufficient alone.
+    static func ddcPathKey(displayFingerprint: String,
+                           ioDisplayLocation: String) -> String? {
+        guard !displayFingerprint.isEmpty, !ioDisplayLocation.isEmpty else { return nil }
+        return "\(displayFingerprint)|\(ioDisplayLocation)"
+    }
+
+    /// Keeps a remembered set of connection paths unique and bounded.
+    /// Re-adding a path moves it to the end, while dropping it lets a changed
+    /// connection be classified again. Two sets are kept this way: paths that
+    /// accept writes but never reply, and paths whose monitor has no speakers,
+    /// so neither slow discovery is repeated on every scan.
+    static func updatedRememberedPaths(_ stored: [String],
+                                       path: String,
+                                       remembered: Bool,
+                                       limit: Int = 16) -> [String] {
+        guard !path.isEmpty, limit > 0 else { return [] }
+        var updated = stored.filter { !$0.isEmpty && $0 != path }
+        if remembered { updated.append(path) }
+        return Array(updated.suffix(limit))
+    }
+
+    static func shouldProbe(pathKey: String?, rememberedPaths: Set<String>) -> Bool {
+        guard let pathKey else { return true }
+        return !rememberedPaths.contains(pathKey)
+    }
+
+    /// Recheck a remembered write-only brightness path once after waking or
+    /// changing displays while speaker discovery is running.
+    static func shouldProbeLuminance(pathKey: String?, writeOnlyPaths: Set<String>,
+                                     probesAudio: Bool, recheckedPaths: Set<String>) -> Bool {
+        guard let pathKey, writeOnlyPaths.contains(pathKey) else { return true }
+        return probesAudio && !recheckedPaths.contains(pathKey)
+    }
+
+    /// Whether a preference sync has to force a scan for the speaker setting:
+    /// only when the last finished scan did not cover it and no scan has been
+    /// queued for it yet. Forcing again would supersede the queued scan.
+    static func needsAudioScan(wanted: Bool, scanned: Bool, queued: Bool?) -> Bool {
+        wanted != (queued ?? scanned)
+    }
+
+    static let ddcRetryDelays: [TimeInterval] = [2, 5, 15]
+
+    /// How long to wait before reading a monitor again after a brightness
+    /// read failed, or nil when its write-only answer stands. A monitor that
+    /// answered earlier this session can still be renegotiating its link
+    /// after a wake or a dropout, and one failed read would hide its speakers
+    /// until the next wake. `attempt` counts from 1.
+    static func ddcRetryDelay(attempt: Int, probesAudio: Bool,
+                              repliedThisSession: Bool) -> TimeInterval? {
+        guard probesAudio, repliedThisSession,
+              attempt >= 1, attempt <= ddcRetryDelays.count else { return nil }
+        return ddcRetryDelays[attempt - 1]
+    }
+
+    /// Each online display has its own deadlines, even if its EDID is shared
+    /// with another panel. Opening Settings can probe early without spending
+    /// another scheduled attempt.
+    struct ServiceDiscoveryRetries {
+        private var deadlines: [UInt32: (attempt: Int, due: TimeInterval)] = [:]
+
+        mutating func found(_ display: UInt32) { deadlines[display] = nil }
+
+        mutating func missing(_ display: UInt32, now: TimeInterval) -> TimeInterval? {
+            if let previous = deadlines[display], now < previous.due { return previous.due - now }
+            let attempt = deadlines[display]?.attempt ?? 0
+            guard ddcRetryDelays.indices.contains(attempt) else { return nil }
+            let delay = ddcRetryDelays[attempt]
+            deadlines[display] = (attempt + 1, now + delay)
+            return delay
+        }
+    }
+
+    static func keepsSoftwareDimOnDiscovery(previouslySoftware: Bool,
+                                             dimmed: Bool, pending: Double?) -> Bool {
+        previouslySoftware && (dimmed || pending.map { $0 < 0.999 } == true)
+    }
+
+    static let volumeKeyRescanInterval: TimeInterval = 10
+
+    /// Whether a volume key that no monitor claimed rescans the displays: only
+    /// while the sound leaves through a monitor that should own it and has no
+    /// route yet, and at most once per interval.
+    static func rescansForVolumeKey(hasTarget: Bool, displayOwnsOutput: Bool,
+                                    now: TimeInterval, lastRescan: TimeInterval?) -> Bool {
+        guard !hasTarget, displayOwnsOutput else { return false }
+        guard let lastRescan else { return true }
+        return now - lastRescan >= volumeKeyRescanInterval
+    }
+
+    // MARK: - Display switching
+
+    enum DisplayConfigurationResult: Equatable {
+        case success, closedLid, failed
+    }
+
+    /// An enable the closed lid denied waits here until the lid opens. Failed
+    /// restore-all requests also wait for a later wake. A request a person
+    /// tapped for, or one a restore-all owes, is kept when a headless recovery
+    /// brings another display back instead.
+    struct DeferredDisplayRestoration {
+        private(set) var ids = Set<UInt32>()
+        private var headlessIDs = Set<UInt32>()
+        private var keptIDs = Set<UInt32>()
+        private var lastLidClosed: Bool? = true
+
+        mutating func record(_ id: UInt32, result: DisplayConfigurationResult) {
+            if result == .closedLid {
+                ids.insert(id)
+                lastLidClosed = true
+            }
+            if result == .failed, keptIDs.contains(id) {
+                ids.insert(id)
+            }
+            if result == .success {
+                ids.remove(id)
+                headlessIDs.remove(id)
+                keptIDs.remove(id)
+            }
+        }
+
+        mutating func keep(_ id: UInt32) {
+            keptIDs.insert(id)
+        }
+
+        mutating func recordHeadless(_ id: UInt32,
+                                     result: DisplayConfigurationResult) {
+            record(id, result: result)
+            if result == .closedLid && !keptIDs.contains(id) {
+                headlessIDs.insert(id)
+            }
+        }
+
+        mutating func cancelHeadless() {
+            ids.subtract(headlessIDs.subtracting(keptIDs))
+            headlessIDs.removeAll()
+        }
+
+        mutating func candidates(lidClosed: Bool?, retryFailures: Bool = false) -> Set<UInt32> {
+            let opened = lidClosed == false && lastLidClosed != false
+            if let lidClosed { lastLidClosed = lidClosed }
+            return opened || retryFailures ? ids : []
+        }
+    }
+
+    static func canConfigureDisplay(enabled: Bool, isBuiltIn: Bool, lidClosed: Bool?) -> Bool {
+        !(enabled && isBuiltIn && lidClosed == true)
+    }
+
+    /// Turning off the final drawable display would leave no UI path to turn
+    /// it back on. The target must be active and another active display must
+    /// remain after the transaction.
+    static func canDisableDisplay(drawableDisplayIDs: Set<UInt32>, target: UInt32) -> Bool {
+        drawableDisplayIDs.contains(target) && drawableDisplayIDs.count > 1
+    }
+
+    /// The active list names only the source of a hardware mirror set, yet the
+    /// display mirroring it is lit and has a backlight of its own: a MacBook
+    /// panel mirroring a monitor is still a panel someone looks at. A display
+    /// counts once the source it mirrors is active.
+    static func participatingDisplayIDs(activeDisplayIDs: Set<UInt32>,
+                                        mirrorSources: [UInt32: UInt32]) -> Set<UInt32> {
+        activeDisplayIDs.union(mirrorSources.compactMap { mirror, source in
+            activeDisplayIDs.contains(source) ? mirror : nil
+        })
+    }
+
+    /// Active display lists can include virtual devices with no picture a
+    /// person can use. Keep only online, active, non-virtual displays when
+    /// deciding whether the Mac has been left without a visible screen.
+    static func drawableDisplayIDs(onlineDisplayIDs: Set<UInt32>,
+                                   activeDisplayIDs: Set<UInt32>,
+                                   virtualDisplayIDs: Set<UInt32>) -> Set<UInt32> {
+        onlineDisplayIDs.intersection(activeDisplayIDs).subtracting(virtualDisplayIDs)
+    }
+
+    /// If a cable removal leaves the Mac with no drawable display, bring back
+    /// one display this app switched off. Prefer the built-in panel so the
+    /// portable Mac recovers without changing any other disabled display.
+    static func headlessRecoveryCandidates(drawableDisplayIDs: Set<UInt32>,
+                                           managedDisabledIDs: Set<UInt32>,
+                                           builtInDisabledIDs: Set<UInt32>) -> [UInt32] {
+        guard drawableDisplayIDs.isEmpty else { return [] }
+        let builtIn = managedDisabledIDs.intersection(builtInDisabledIDs)
+        return builtIn.sorted() + managedDisabledIDs.subtracting(builtIn).sorted()
+    }
+
+    // MARK: - Software dimming (gamma curve)
+
+    /// Displays with no DDC channel are dimmed in the video pipeline instead:
+    /// the display's gamma curve is scaled down, which darkens the picture
+    /// exactly like lowering the backlight would, per display and fully
+    /// reversible. The scale is linear all the way down and zero really is
+    /// black (owner's call): the slider and the brightness keys can always
+    /// bring it back.
+    static func softwareDimFactor(for value: Double) -> Float {
+        Float(min(max(value, 0), 1))
+    }
+
+    /// A gamma table scaled toward black. Factor one returns the input
+    /// untouched so restoring is bit-exact.
+    static func scaledGammaTable(_ table: [Float], factor: Float) -> [Float] {
+        guard factor < 1 else { return table }
+        return table.map { $0 * factor }
+    }
+
+    /// The gamma scale to put back on a software-dimmed display when the
+    /// routes are rebuilt. Only a dim this app applied itself is ours to
+    /// restore: the session's remembered level is also filled in from a
+    /// monitor's own DDC or system reading, and that is its backlight, not a
+    /// gamma scale. Replaying such a level here darkened a screen that was
+    /// already at exactly that brightness, every time the routes were rebuilt
+    /// (issue #697).
+    static func softwareDimToRestore(remembered: Double?, appliedByApp: Bool) -> Double {
+        appliedByApp ? (remembered ?? 1.0) : 1.0
+    }
+
+    /// The dim level put back on a display that just returned from a
+    /// connection gap. The saved level is honoured, but never so dark that
+    /// the screen reads as dead: replugging the cable is the one gesture
+    /// left to someone facing a black picture, and it has to land on
+    /// something visible (issue #301). Live control is untouched and still
+    /// reaches true black.
+    static let reconnectionDimFloor = 0.25
+
+    static func reconnectedDimLevel(_ saved: Double) -> Double {
+        max(min(saved, 1), reconnectionDimFloor)
+    }
+
+    // MARK: - Brightness keys
+
+    /// The keyboard brightness keys arrive as system-defined events, not key
+    /// downs: subtype 8 (auxiliary control buttons) with the key code and
+    /// press state packed into data1. Codes 2 and 3 are brightness up and
+    /// down; sixteen steps span the whole range, matching the system's own
+    /// increments.
+    static let brightnessKeyStep = 1.0 / 16.0
+
+    /// How far one press of the brightness keys or the display brightness
+    /// shortcuts moves a display. Standard is the system's sixteenth; half
+    /// and quarter divide it, and quarter is the step the system itself
+    /// takes for Option-Shift.
+    enum KeyStep: String, CaseIterable {
+        case standard, half, quarter
+
+        static func sanitized(_ raw: String?) -> KeyStep {
+            KeyStep(rawValue: raw ?? "") ?? .standard
+        }
+
+        var fraction: Double {
+            switch self {
+            case .standard: return brightnessKeyStep
+            case .half: return brightnessKeyStep / 2
+            case .quarter: return brightnessKeyStep / 4
+            }
+        }
+
+        /// A press never moves further than the chosen step. A step that is
+        /// already finer, like the system's Option-Shift quarter, stays as is.
+        func limited(_ delta: Double) -> Double {
+            guard abs(delta) > fraction else { return delta }
+            return delta < 0 ? -fraction : fraction
+        }
+
+        /// How many of the system's own Option-Shift quarter steps make one
+        /// press. Nil when the system's plain step already is the choice.
+        var systemQuarterSteps: Int? {
+            switch self {
+            case .standard: return nil
+            case .half: return 2
+            case .quarter: return 1
+            }
+        }
+    }
+
+    /// A press this app leaves to the system is sent on as the system's own
+    /// quarter steps when a finer step is chosen, so the system still moves
+    /// the display and shows its own feedback. A press held with Command,
+    /// Control or Option means something else to the system (another
+    /// display, Displays settings, its own quarter step) and stays untouched.
+    static func systemQuarterSteps(for step: KeyStep, command: Bool, control: Bool,
+                                   option: Bool) -> Int? {
+        guard !command, !control, !option else { return nil }
+        return step.systemQuarterSteps
+    }
+
+    /// The two halves of one Option-Shift brightness press, laid out the way
+    /// the keyboard sends them: key code and press state in data1, the
+    /// state repeated under the Option and Shift flags.
+    static func systemQuarterStepHalves(increase: Bool) -> [(data1: Int, flags: UInt)] {
+        let keyCode = increase ? 2 : 3
+        let optionShift: UInt = 0x80000 | 0x20000
+        return [0x0A, 0x0B].map { state in
+            ((keyCode << 16) | (state << 8), UInt(state << 8) | optionShift)
+        }
+    }
+
+    /// Marks the Option-Shift presses this app sends on to the system, so its
+    /// own tap lets them through.
+    static let systemQuarterStepMarker: Int64 = 0x564F4252 // "VOBR"
+
+    /// One brightness key press sent on as `count` of the system's own
+    /// Option-Shift quarter steps, each a press and a release carrying the
+    /// marker. Posting is left to the caller.
+    static func systemQuarterStepEvents(increase: Bool, count: Int) -> [CGEvent] {
+        let halves = systemQuarterStepHalves(increase: increase)
+        return (0..<max(0, count)).flatMap { _ in
+            halves.compactMap { half -> CGEvent? in
+                guard let event = NSEvent.otherEvent(
+                    with: .systemDefined, location: .zero,
+                    modifierFlags: NSEvent.ModifierFlags(rawValue: half.flags),
+                    timestamp: 0, windowNumber: 0, context: nil,
+                    subtype: 8, data1: half.data1, data2: -1)?.cgEvent
+                else { return nil }
+                event.setIntegerValueField(.eventSourceUserData, value: systemQuarterStepMarker)
+                return event
+            }
+        }
+    }
+
+    struct BrightnessKeyEvent: Equatable {
+        let delta: Double
+        let isKeyDown: Bool
+        let isRepeat: Bool
+    }
+
+    enum BrightnessKeyOwner: Equatable {
+        case system
+        case app(delta: Double)
+    }
+
+    struct BrightnessKeyOwnership {
+        private var owners = [Bool: BrightnessKeyOwner]()
+
+        mutating func owner(of press: BrightnessKeyEvent, option: Bool, shift: Bool,
+                            commandOrControl: Bool) -> BrightnessKeyOwner {
+            let increases = press.delta > 0
+            guard press.isKeyDown else { return owners.removeValue(forKey: increases) ?? .system }
+            if !press.isRepeat {
+                if commandOrControl || (option && !shift) {
+                    owners[increases] = .system
+                } else {
+                    owners[increases] = .app(delta: option ? press.delta / 4 : press.delta)
+                }
+            }
+            return owners[increases] ?? .system
+        }
+    }
+
+    static func brightnessKeyEvent(subtype: Int, data1: Int) -> BrightnessKeyEvent? {
+        guard subtype == 8 else { return nil }
+        let raw = UInt32(truncatingIfNeeded: data1)
+        let state = Int((raw >> 8) & 0xFF)
+        guard state == 10 || state == 11 else { return nil }
+        let delta: Double
+        switch (raw >> 16) & 0xFFFF {
+        case 2: delta = brightnessKeyStep
+        case 3: delta = -brightnessKeyStep
+        default: return nil
+        }
+        return BrightnessKeyEvent(delta: delta, isKeyDown: state == 10, isRepeat: (raw & 0x1) != 0)
+    }
+
+    static func isKeyboardLightPress(subtype: Int, data1: Int) -> Bool {
+        guard subtype == 8 else { return false }
+        let raw = UInt32(truncatingIfNeeded: data1)
+        // Native illumination up, down and toggle. Key-up is always left alone.
+        return (21...23).contains((raw >> 16) & 0xFFFF) && ((raw >> 8) & 0xFF) == 10
+    }
+
+    /// Keyboards other than the built-in one do not send brightness as a
+    /// media key at all. They send an ordinary key press: either one of the
+    /// two dedicated brightness codes, or F14 and F15, which the system
+    /// offers as brightness keys in its own keyboard shortcuts whenever an
+    /// external keyboard is attached. Measured against the display server:
+    /// all four move brightness by the same sixteenth of the range as the
+    /// built-in keys (issue #287).
+    enum BrightnessKeyCode {
+        static let increase = 144
+        static let decrease = 145
+        static let functionIncrease = 113
+        static let functionDecrease = 107
+    }
+
+    /// Cheap enough for the hot path: every keystroke in the session passes
+    /// through the tap, and only these four may cost anything more.
+    static func isBrightnessKeyCode(_ keyCode: Int) -> Bool {
+        keyCode == BrightnessKeyCode.increase || keyCode == BrightnessKeyCode.decrease
+            || keyCode == BrightnessKeyCode.functionIncrease
+            || keyCode == BrightnessKeyCode.functionDecrease
+    }
+
+    static func brightnessFunctionKeyEvent(keyCode: Int,
+                                           isKeyDown: Bool,
+                                           isRepeat: Bool,
+                                           hasModifiers: Bool,
+                                           functionKeysAdjustBrightness: Bool) -> BrightnessKeyEvent? {
+        // A modified press means something else: the system opens its own
+        // display settings, and finer steps are its business too.
+        guard !hasModifiers else { return nil }
+        let delta: Double
+        switch keyCode {
+        case BrightnessKeyCode.increase: delta = brightnessKeyStep
+        case BrightnessKeyCode.decrease: delta = -brightnessKeyStep
+        case BrightnessKeyCode.functionIncrease where functionKeysAdjustBrightness:
+            delta = brightnessKeyStep
+        case BrightnessKeyCode.functionDecrease where functionKeysAdjustBrightness:
+            delta = -brightnessKeyStep
+        default: return nil
+        }
+        return BrightnessKeyEvent(delta: delta, isKeyDown: isKeyDown, isRepeat: isRepeat)
+    }
+
+    /// Whether F14 and F15 still mean brightness. The system ships them
+    /// switched on, so an absent entry means yes; a user who turned them off
+    /// in the system's keyboard shortcuts gets them left alone.
+    static func functionKeysAdjustBrightness(symbolicHotKeys: [String: Any]?) -> Bool {
+        guard let symbolicHotKeys else { return true }
+        for identifier in ["53", "54"] {
+            guard let entry = symbolicHotKeys[identifier] as? [String: Any] else { continue }
+            if let enabled = entry["enabled"] as? Bool, !enabled { return false }
+            if let enabled = entry["enabled"] as? NSNumber, !enabled.boolValue { return false }
+        }
+        return true
+    }
+
+    /// Plain brightness key presses reach the system unless this app answers
+    /// them: to follow the pointer, to show its own overlay or the island in
+    /// place of the system's, or to take a finer step. Only then is their
+    /// keystroke tap worth it.
+    static func answersPlainBrightnessKeys(followsPointer: Bool, overlayReplacesNative: Bool,
+                                           finerSteps: Bool) -> Bool {
+        followsPointer || overlayReplacesNative || finerSteps
+    }
+
+    /// The display a plain brightness key moves: the one under the pointer
+    /// when the pointer decides, otherwise the one the system's keys move.
+    static func plainKeyTarget(followsPointer: Bool, pointerDisplay: UInt32?, systemTarget: UInt32?) -> UInt32? {
+        followsPointer ? pointerDisplay : systemTarget
+    }
+
+    static func shortcutDisplay(followsPointer: Bool, pointerDisplay: UInt32?,
+                                primaryDisplay: UInt32, eligible: Set<UInt32>) -> UInt32? {
+        let target = followsPointer ? pointerDisplay : primaryDisplay
+        guard let target, eligible.contains(target) else { return nil }
+        return target
+    }
+
+    /// Every key path moves a 0...1 level and clamps it the same way, whether
+    /// the level is a backlight or a monitor's speakers.
+    static func steppedLevel(_ current: Double, delta: Double) -> Double {
+        min(max(current + delta, 0), 1)
+    }
+
+    static func steppedBrightness(_ current: Double, delta: Double) -> Double {
+        steppedLevel(current, delta: delta)
+    }
+
+    // MARK: - Volume keys
+
+    /// Which step a volume key press asks for, from the modifiers held with
+    /// it. Same rule as the notch volume gate: Command or Control, and Option
+    /// without Shift, leave the press alone; Option with Shift is the fine
+    /// percent step, and anything else uses the selected step.
+    static func volumeKeyFineness(option: Bool, shift: Bool, commandOrControl: Bool) -> Bool? {
+        guard !commandOrControl, !option || shift else { return nil }
+        return option
+    }
+
+    enum VolumeKeyAction: Hashable {
+        case step(direction: Int)
+        case toggleMute
+    }
+
+    struct VolumeKeyEvent: Equatable {
+        let action: VolumeKeyAction
+        let isKeyDown: Bool
+        let isRepeat: Bool
+    }
+
+    /// Parses a volume or mute key from the same system-defined event the
+    /// brightness keys use. Key codes are the system's own: 0 up, 1 down,
+    /// 7 mute. Only key-down and key-up states are real presses.
+    static func volumeKeyEvent(subtype: Int, data1: Int) -> VolumeKeyEvent? {
+        guard subtype == 8 else { return nil }
+        let raw = UInt32(truncatingIfNeeded: data1)
+        let state = Int((raw >> 8) & 0xFF)
+        guard state == 10 || state == 11 else { return nil }
+        let action: VolumeKeyAction
+        switch (raw >> 16) & 0xFFFF {
+        case 0: action = .step(direction: 1)
+        case 1: action = .step(direction: -1)
+        case 7: action = .toggleMute
+        default: return nil
+        }
+        return VolumeKeyEvent(action: action, isKeyDown: state == 10, isRepeat: (raw & 0x1) != 0)
+    }
+
+    /// The change the system's easing call needs to bring a display from the
+    /// level it reports to `target`: that call moves the level by an amount,
+    /// not to one. Nil when the reported level is not a real one or the
+    /// display is already there, and the level is written directly instead.
+    static func easedBrightnessChange(to target: Double, from reported: Float) -> Float? {
+        guard target.isFinite, reported.isFinite, reported >= 0, reported <= 1 else { return nil }
+        let change = Float(min(max(target, 0), 1)) - reported
+        return change == 0 ? nil : change
+    }
+
+    /// Whether an eased step left the display at the level it asked for. The
+    /// system reports the new level as soon as it accepts the change, so a
+    /// display that ignored it still reports the old one.
+    static func easedBrightnessLanded(on target: Double, reported: Float) -> Bool {
+        reported.isFinite && abs(Double(reported) - target) < 0.001
+    }
+
+    /// Whether a brightness key press aimed at a system-routed display is
+    /// stepped by the app instead of left to the system (issue #268). The
+    /// system's own key handling only ever moves its native target, so a
+    /// press the pointer routes to any other display (an Apple pipeline
+    /// external monitor, or any display in clamshell mode) has to be stepped
+    /// here or it lands on the wrong screen. The built-in panel keeps the
+    /// native handling and its animation unless the overlay replaces it.
+    static func stepsSystemRoutedDisplay(followsPointer: Bool,
+                                         displayIsBuiltIn: Bool,
+                                         overlayReplacesNative: Bool) -> Bool {
+        if followsPointer, !displayIsBuiltIn { return true }
+        return overlayReplacesNative
+    }
+
+    /// Whether this app shows a brightness change in place of the system:
+    /// with its overlay when that option is on, or in the island while the
+    /// island shows notices. An island hidden until hover or away in full
+    /// screen shows none, so the key keeps the system's own feedback rather
+    /// than bringing back the overlay its option turned off.
+    static func overlayReplacesNative(overlayEnabled: Bool, islandRoutes: Bool,
+                                      islandShowsNotices: Bool) -> Bool {
+        overlayEnabled || (islandRoutes && islandShowsNotices)
+    }
+
+    /// Sixteen segments match the system brightness steps. A non-zero value
+    /// keeps at least one segment visible while exact zero stays empty.
+    static func filledBrightnessSegments(_ brightness: Double) -> Int {
+        let clamped = min(max(brightness, 0), 1)
+        guard clamped > 0 else { return 0 }
+        return min(Int((clamped * 16).rounded(.up)), 16)
+    }
+
+    /// Whole percentage used by the brightness overlay.
+    static func wholePercent(_ brightness: Double) -> Int {
+        guard brightness.isFinite else { return 0 }
+        return Int((min(max(brightness, 0), 1) * 100).rounded())
+    }
+
+    /// DDC value to the 0...1 slider scale.
+    /// Whether a remembered brightness can still be stepped from, or the
+    /// monitor has to be asked first. A value the app itself just wrote is
+    /// true; one that has been sitting around is only a guess, because the
+    /// monitor has buttons of its own (issue #370).
+    static func trustsRememberedLevel(lastKnownAt: Date?,
+                                      now: Date,
+                                      window: TimeInterval) -> Bool {
+        guard let lastKnownAt else { return false }
+        let age = now.timeIntervalSince(lastKnownAt)
+        return age >= 0 && age < window
+    }
+
+    static func normalized(current: UInt16, maximum: UInt16) -> Double {
+        let ceiling = sanitizedMaximum(maximum)
+        return min(max(Double(current) / Double(ceiling), 0), 1)
+    }
+
+    /// Slider value to the display's own scale, rounded to the nearest step.
+    static func deviceValue(for normalized: Double, maximum: UInt16) -> UInt16 {
+        let ceiling = sanitizedMaximum(maximum)
+        let clamped = min(max(normalized, 0), 1)
+        return UInt16((clamped * Double(ceiling)).rounded())
+    }
+
+    // MARK: - Monitor speakers
+
+    /// A volume reply, but only when it describes speakers that exist.
+    /// Brightness may assume the conventional range for a monitor that
+    /// reports none, because every panel has a backlight; speakers are the
+    /// other way round. A monitor without them still answers the code with an
+    /// empty range, so taking the brightness route would hand a silent display
+    /// a slider that looks like it works.
+    static func audioReply(current: UInt16, maximum: UInt16) -> Double? {
+        guard maximum > 0, current <= maximum else { return nil }
+        return Double(current) / Double(maximum)
+    }
+
+    /// These MCCS revisions define 0x8D as a scalar audio control.
+    static func usesScalarMute(mccsVersion: UInt16?) -> Bool {
+        switch mccsVersion {
+        case 0x0200, 0x0201, 0x0300: return true
+        default: return false
+        }
+    }
+
+    /// In the combined control, ML advertises audio mute support and SL
+    /// reports its state independently of screen blanking in the high bytes.
+    static func muteReply(current: UInt16, maximum: UInt16, mccsVersion: UInt16? = nil) -> Bool? {
+        let audio: UInt16
+        if usesScalarMute(mccsVersion: mccsVersion) {
+            audio = current
+        } else {
+            guard (maximum & 0xFF) == audioMuteSupported else { return nil }
+            audio = current & 0xFF
+        }
+        switch audio {
+        case audioMutedValue: return true
+        case audioUnmutedValue: return false
+        default: return nil
+        }
+    }
+
+    /// Whether a monitor whose mute is not the MCCS control still takes the
+    /// unmute when it leaves zero. A Samsung S34C65xT reads 0 unmuted and 1
+    /// muted, and stays silent after reaching zero until it is told to unmute.
+    /// Accept this quirk only for a scalar reply advertising audio mute support.
+    static func unmutesLeavingZero(muteReply current: UInt16, maximum: UInt16, mccsVersion: UInt16? = nil) -> Bool {
+        !usesScalarMute(mccsVersion: mccsVersion) && current == 0 && maximum == audioMuteSupported
+    }
+
+    static func muteDeviceValue(_ muted: Bool) -> UInt16 {
+        muted ? audioMutedValue : audioUnmutedValue
+    }
+
+    /// Whether the Mac's sound is carried by a display cable, which is what a
+    /// monitor's own speakers are. Other transports (built-in speakers, USB,
+    /// Bluetooth) keep the volume control they already have.
+    static func isDisplayAudioTransport(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeHDMI
+            || transportType == kAudioDeviceTransportTypeDisplayPort
+    }
+
+    /// Whether macOS hands the output's volume to a monitor rather than leaving
+    /// it alone: only when the sound leaves through a display cable whose device
+    /// macOS cannot set the volume of. Any output macOS can set keeps its own
+    /// keys, so built-in speakers and headphones never change behaviour.
+    static func displayOwnsOutputVolume(transport: UInt32,
+                                        outputHasSettableVolume: Bool) -> Bool {
+        isDisplayAudioTransport(transport) && !outputHasSettableVolume
+    }
+
+    /// A panel targets a physical connection. An output control also targets
+    /// the CoreAudio device selected when the user operated it.
+    struct SpeakerTarget: Equatable {
+        let displayID: UInt32
+        let path: String
+        var connectionGeneration: UInt64 = 0
+        var deviceID: AudioObjectID?
+        var outputGeneration: Int?
+    }
+
+    struct MonitorSpeakerOutput: Equatable {
+        var target: SpeakerTarget
+        let volume: Double
+        /// A monitor can report its physical mute even when its connection cannot be verified for a write.
+        let muted: Bool?
+        let canToggleMute: Bool
+    }
+
+    /// The mute write that goes with one level change on a monitor's speakers,
+    /// or nil for none. Many monitors mute themselves when their volume hits
+    /// zero and then ignore volume writes until told to unmute, while the
+    /// mute this app last read still says unmuted. So reaching zero writes
+    /// mute on, as macOS does for its own outputs, and leaving zero always
+    /// writes mute off whatever the last reading said. A raise (or a slider
+    /// set) also lifts a mute the person chose; a lower leaves it in place.
+    /// A monitor without an MCCS mute control gets no mute change here.
+    static func monitorMuteChange(from current: Double, muted: Bool?,
+                                  to level: Double, raises: Bool) -> Bool? {
+        guard let muted else { return nil }
+        if level <= 0 { return muted ? nil : true }
+        if current <= 0 || (muted && raises) { return false }
+        return nil
+    }
+
+    enum SpeakerChange {
+        case set(volume: Double?, muted: Bool?)
+        case step(levels: [(Double) -> Double], raises: Bool)
+        case toggleMute
+
+        /// Changes already waiting behind one transaction can share the next
+        /// readback. A toggle or a change of direction keeps its ordering.
+        func replacing(_ older: Self) -> Self? {
+            switch (older, self) {
+            case (.set(.some, nil), .set(.some, nil)):
+                return self
+            case let (.step(previous, up), .step(next, raises)) where up == raises:
+                return .step(levels: previous + next, raises: raises)
+            default:
+                return nil
+            }
+        }
+    }
+
+    typealias VCPReading = (current: UInt16, maximum: UInt16)
+
+    struct SpeakerLevel: Equatable {
+        let raw: UInt16
+        let maximum: UInt16
+        var volume: Double { Double(raw) / Double(maximum) }
+
+        init?(_ reply: VCPReading?) {
+            guard let reply, audioReply(current: reply.current, maximum: reply.maximum) != nil else { return nil }
+            raw = reply.current
+            maximum = reply.maximum
+        }
+
+        func fitsUnmuteCeiling(_ ceiling: UInt16) -> Bool {
+            // Zero can select a default of unknown loudness.
+            (raw == 0 ? maximum : raw) <= ceiling
+        }
+    }
+
+    /// Runs on the DDC queue. Every successful result describes a level the
+    /// monitor reported. The transport checks the target before each write.
+    static func applySpeakerChange(
+        _ change: SpeakerChange, hasNativeMute: Bool, unmutesLeavingZero: Bool, muteVersion: UInt16?, hasEndpointID: Bool,
+        keySettings: MonitorVolumeKeySettings, unmuteCeiling: (UInt16) -> UInt16, canVerifyUnmute: () -> Bool,
+        needsUnmute: inout Bool, confirmedZeroUnmute: inout Bool,
+        read: (UInt8) -> VCPReading?, write: (UInt8, UInt16) -> UInt16?
+    ) -> (level: SpeakerLevel, muted: Bool?, accepted: Bool)? {
+        guard let initial = SpeakerLevel(read(audioVolumeCode)) else { return nil }
+        var unmuteReadZero = false
+        func readMute(afterUnmute: Bool = false) -> Bool? {
+            guard let reply = read(audioMuteCode) else { return nil }
+            if Self.unmutesLeavingZero(muteReply: reply.current, maximum: reply.maximum, mccsVersion: muteVersion) {
+                if afterUnmute { unmuteReadZero = true }
+                return afterUnmute || confirmedZeroUnmute ? false : nil
+            }
+            return muteReply(current: reply.current, maximum: reply.maximum, mccsVersion: muteVersion)
+        }
+        let muted = hasNativeMute ? readMute() : nil
+        guard !hasNativeMute || muted != nil else { return nil }
+
+        var target = initial.raw
+        let requestsLevel: Bool
+        var desiredMute: Bool?
+        switch change {
+        case let .set(volume, requestedMute):
+            requestsLevel = volume != nil
+            guard volume != nil || requestedMute != nil, requestedMute == nil || hasNativeMute else { return nil }
+            if let volume {
+                guard volume.isFinite else { return nil }
+                target = deviceValue(for: volume, maximum: initial.maximum)
+                desiredMute = monitorMuteChange(from: initial.volume, muted: muted,
+                                                to: Double(target) / Double(initial.maximum), raises: true)
+            }
+            if let requestedMute { desiredMute = requestedMute }
+        case let .step(levels, raises):
+            requestsLevel = true
+            if muted == true && raises { target = 0 }
+            let start = target
+            for step in levels {
+                let current = Double(target) / Double(initial.maximum)
+                let next = step(current)
+                guard next.isFinite else { return nil }
+                if let bounded = keySettings.boundedStep(from: target, maximum: initial.maximum, to: next) {
+                    target = bounded
+                }
+            }
+            let mutesAtZero = !raises && initial.raw == 0 && keySettings.minimumPercent == 0 && muted == false
+            guard target != start || mutesAtZero || (needsUnmute && raises && target > 0) else { return (initial, muted, true) }
+            desiredMute = monitorMuteChange(from: initial.volume, muted: muted,
+                                            to: Double(target) / Double(initial.maximum), raises: raises)
+        case .toggleMute:
+            requestsLevel = false
+            guard let muted else { return nil }
+            desiredMute = !muted
+        }
+
+        // Without an endpoint ID we cannot release a mute latched by zero.
+        // Keep an audible speaker at its lowest positive step and leave an
+        // already-zero speaker alone when asked to lower it.
+        if requestsLevel, target == 0, !hasEndpointID, hasNativeMute || unmutesLeavingZero {
+            target = min(initial.raw, 1)
+            desiredMute = nil
+        }
+
+        func setNativeMute(_ value: Bool) -> Bool {
+            write(audioMuteCode, muteDeviceValue(value)) != nil && readMute() == value
+        }
+        if desiredMute == true, muted != true, !setNativeMute(true) { return nil }
+
+        if !requestsLevel, desiredMute == false {
+            let ceiling = keySettings.ceiling(for: initial.maximum)
+            guard ceiling > 0 else { return (initial, muted, true) }
+            // Under a reduced ceiling, replace an unknown default with the
+            // lowest positive setting and confirm it before releasing mute.
+            if ceiling < initial.maximum { target = min(max(target, 1), ceiling) }
+        }
+
+        let releasesZeroLatch = !hasNativeMute && unmutesLeavingZero && target > 0 && (initial.raw == 0 || needsUnmute)
+        if desiredMute == false || releasesZeroLatch {
+            // The reading is still valid even when the connection only supports reporting mute.
+            guard hasEndpointID else { return (initial, muted, false) }
+            guard canVerifyUnmute() else { return nil }
+        }
+        if releasesZeroLatch { needsUnmute = true }
+        func writeVolume(_ value: UInt16) -> SpeakerLevel? {
+            guard let sent = write(audioVolumeCode, value),
+                  let actual = SpeakerLevel(read(audioVolumeCode)),
+                  actual.maximum == initial.maximum, actual.raw == sent else { return nil }
+            return actual
+        }
+        var confirmed = initial
+        if target != initial.raw {
+            guard let actual = writeVolume(target) else { return nil }
+            confirmed = actual
+        }
+        func recoverAfterUnmute() {
+            guard !setNativeMute(true),
+                  let current = SpeakerLevel(read(audioVolumeCode)),
+                  current.maximum == confirmed.maximum else { return }
+            // A failed re-mute may leave the speakers loud. Only lower a known
+            // level, on the same scale, to a positive setting within the live limit.
+            let quiet = min(confirmed.raw, unmuteCeiling(current.maximum))
+            guard quiet > 0, current.raw > quiet else { return }
+            _ = writeVolume(quiet)
+        }
+        if !hasNativeMute {
+            if releasesZeroLatch {
+                guard confirmed.raw <= keySettings.ceiling(for: confirmed.maximum),
+                      write(audioMuteCode, audioUnmutedValue) != nil else { return nil }
+                // Firmware can restore its previous (loud) level as part of unmute.
+                guard readMute(afterUnmute: true) == false, SpeakerLevel(read(audioVolumeCode)) == confirmed,
+                      confirmed.raw <= unmuteCeiling(confirmed.maximum) else {
+                    recoverAfterUnmute()
+                    return nil
+                }
+                needsUnmute = false
+            }
+            // Zero can select the monitor's default volume. A level readback
+            // alone cannot establish its mute state.
+            return (confirmed, nil, true)
+        }
+        if desiredMute == false {
+            guard write(audioMuteCode, audioUnmutedValue) != nil else { return nil }
+            // Some firmware restores its own stored level on unmute. A level
+            // change must still be present after that last command.
+            let final = SpeakerLevel(read(audioVolumeCode))
+            guard readMute(afterUnmute: true) == false, let final, !requestsLevel || final == confirmed,
+                  final.fitsUnmuteCeiling(unmuteCeiling(final.maximum)) else {
+                if muted == true || initial.raw == 0 { recoverAfterUnmute() }
+                return nil
+            }
+            if unmuteReadZero { confirmedZeroUnmute = true }
+            return (final, false, true)
+        }
+        guard let actualMute = readMute(), desiredMute == nil || desiredMute == actualMute else { return nil }
+        if desiredMute == true && target == initial.raw {
+            guard let final = SpeakerLevel(read(audioVolumeCode)) else { return nil }
+            return (final, actualMute, true)
+        }
+        return (confirmed, actualMute, true)
+    }
+
+    /// Match against every connected external display, including those whose
+    /// speakers did not answer. A dock or a lone monitor is not an identity.
+    static func displayForAudioOutput(deviceName: String,
+                                      candidates: [(id: UInt32, name: String)]) -> UInt32? {
+        func productName(_ value: String) -> String {
+            var name = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            for suffix in [" (hdmi)", " (displayport)", " hdmi audio", " displayport audio", " audio"]
+                where name.hasSuffix(suffix) {
+                name.removeLast(suffix.count)
+            }
+            return name
+        }
+        let device = productName(deviceName)
+        guard !device.isEmpty, !["audio", "display", "monitor", "hdmi", "displayport"].contains(device)
+        else { return nil }
+        let matches = candidates.filter { productName($0.name) == device }
+        return matches.count == 1 ? matches[0].id : nil
+    }
+
+    /// An optional lower quarter of the slider dims the picture after the
+    /// monitor has reached its own minimum. The rest keeps using its backlight.
+    static let extendedDimmingRange = 0.25
+
+    static func extendedDimmingComponents(for brightness: Double) -> (hardware: Double, picture: Double) {
+        let level = min(max(brightness, 0), 1)
+        if level < extendedDimmingRange {
+            return (0, level / extendedDimmingRange)
+        }
+        return ((level - extendedDimmingRange) / (1 - extendedDimmingRange), 1)
+    }
+
+    static func extendedDimmingLevel(hardware: Double, remembered: Double?, pictureDimmed: Bool) -> Double {
+        let physical = extendedDimmingRange
+            + min(max(hardware, 0), 1) * (1 - extendedDimmingRange)
+        guard pictureDimmed, hardware <= 0.001, let remembered,
+              remembered < extendedDimmingRange else { return physical }
+        return min(max(remembered, 0), extendedDimmingRange)
+    }
+
+    // MARK: - Display to service matching
+
+    /// What CoreGraphics knows about a display, for scoring against an
+    /// IORegistry service candidate.
+    struct DisplayIdentity {
+        var vendorID: Int64?
+        var productID: Int64?
+        var weekOfManufacture: Int64?
+        var yearOfManufacture: Int64?
+        var horizontalImageSize: Int64?
+        var verticalImageSize: Int64?
+        var ioDisplayLocation: String?
+        var productName: String?
+        var serialNumber: Int64?
+    }
+
+    /// What the IORegistry walk collected for one external service.
+    struct ServiceIdentity {
+        var edidUUID = ""
+        var ioDisplayLocation = ""
+        var productName = ""
+        var serialNumber: Int64 = 0
+        var ordinal = 0
+    }
+
+    /// The EDID UUID embeds identity fields at fixed positions; each one that
+    /// matches the display scores a point, and the IORegistry path match is
+    /// decisive on its own. Zero means the pair is unrelated.
+    static func matchScore(service: ServiceIdentity, display: DisplayIdentity,
+                           requireIdentity: Bool = false) -> Int {
+        var score = 0
+        func uuidChunk(at location: Int) -> String {
+            String(service.edidUUID.prefix(location + 4).suffix(4))
+        }
+        if let vendor = display.vendorID, vendor > 0 {
+            let key = String(format: "%04X", UInt16(clamping: vendor))
+            if key != "0000", key == uuidChunk(at: 0) { score += 1 }
+        }
+        if let product = display.productID, product > 0 {
+            let value = UInt16(clamping: product)
+            let key = String(format: "%02X%02X", UInt8(value & 0xFF), UInt8(value >> 8))
+            if key != "0000", key == uuidChunk(at: 4) { score += 1 }
+        }
+        let sameEDIDProduct = score == 2
+        let sameLocation = !service.ioDisplayLocation.isEmpty && service.ioDisplayLocation == display.ioDisplayLocation
+        let sameName = !service.productName.isEmpty && service.productName.lowercased() == display.productName?.lowercased()
+        if requireIdentity {
+            guard sameLocation || sameEDIDProduct || sameName else { return 0 }
+            if let serial = display.serialNumber, serial != 0, service.serialNumber != 0,
+               serial != service.serialNumber { return 0 }
+        }
+        if let week = display.weekOfManufacture, let year = display.yearOfManufacture, year >= 1990 {
+            let key = String(format: "%02X%02X",
+                             UInt8(clamping: week),
+                             UInt8(clamping: year - 1990))
+            if key != "0000", key == uuidChunk(at: 19) { score += 1 }
+        }
+        if let horizontal = display.horizontalImageSize, let vertical = display.verticalImageSize {
+            let key = String(format: "%02X%02X",
+                             UInt8(clamping: horizontal / 10),
+                             UInt8(clamping: vertical / 10))
+            if key != "0000", key == uuidChunk(at: 30) { score += 1 }
+        }
+        if sameLocation { score += 10 }
+        if sameName { score += 1 }
+        if service.serialNumber != 0, service.serialNumber == display.serialNumber {
+            score += 1
+        }
+        return score
+    }
+
+    /// Native and inactive external displays also own their DDC services.
+    /// Reserve their matches even though they do not need a brightness probe.
+    static func brightnessServices(displays: [(index: Int, identity: DisplayIdentity)],
+                                   candidates: Set<Int>, services: [ServiceIdentity]) -> [Int: Int] {
+        let scores = displays.flatMap { display in
+            services.map { service in
+                let serial = display.identity.serialNumber ?? 0
+                let conflict = serial != 0 && service.serialNumber != 0 && serial != service.serialNumber
+                let score = conflict ? 0 : matchScore(service: service, display: display.identity,
+                                                       requireIdentity: displays.count > 1)
+                return (displayIndex: display.index, serviceOrdinal: service.ordinal, score: score)
+            }
+        }
+        let assigned = assignServices(scores: scores)
+        if assigned.isEmpty, displays.count == 1, services.count == 1, let display = displays.first,
+           candidates.contains(display.index), let service = services.first {
+            if let serial = display.identity.serialNumber, serial != 0, service.serialNumber != 0,
+               serial != service.serialNumber { return [:] }
+            return [display.index: service.ordinal]
+        }
+        return assigned.filter { candidates.contains($0.key) }
+    }
+
+    /// Keep each service's strongest possible owners. A tie can resolve once
+    /// another display has claimed its own service, provided the remaining
+    /// display also has a unique best choice.
+    static func assignServices(scores: [(displayIndex: Int, serviceOrdinal: Int, score: Int)])
+        -> [Int: Int] {
+        var remaining = scores.filter { pair in
+            pair.score > 0 && !scores.contains {
+                $0.serviceOrdinal == pair.serviceOrdinal && $0.score > pair.score
+            }
+        }
+        var assignment: [Int: Int] = [:]
+        while let match = remaining.first(where: { pair in
+            !remaining.contains { other in
+                (other.serviceOrdinal == pair.serviceOrdinal && other.displayIndex != pair.displayIndex)
+                    || (other.displayIndex == pair.displayIndex && other.serviceOrdinal != pair.serviceOrdinal
+                        && other.score >= pair.score)
+            }
+        }) {
+            assignment[match.displayIndex] = match.serviceOrdinal
+            remaining.removeAll { $0.displayIndex == match.displayIndex || $0.serviceOrdinal == match.serviceOrdinal }
+        }
+        return assignment
+    }
+
+    /// A speaker write needs one best service in both directions. The same
+    /// vendor alone, or a tie between identical monitors, cannot select it.
+    static func speakerService(for index: Int, scores: [(displayIndex: Int, serviceOrdinal: Int, score: Int)]) -> Int? {
+        let candidates = scores.filter { $0.displayIndex == index }
+        guard let best = candidates.max(by: { $0.score < $1.score }), best.score >= 2,
+              !scores.contains(where: {
+                  ($0.displayIndex == index && $0.serviceOrdinal != best.serviceOrdinal
+                   || $0.displayIndex != index && $0.serviceOrdinal == best.serviceOrdinal)
+                      && $0.score >= best.score
+              }) else { return nil }
+        return best.serviceOrdinal
+    }
+}
+
+/// Each mounted slider waits for both the end of its edit and the monitor's
+/// confirmation of its last request. Either can arrive first.
+final class SpeakerSliderFeedback {
+    typealias Output = (id: AudioObjectID, uid: String)
+
+    struct Endpoint {
+        let registryEntryID: UInt64?
+        let fallbackService: CFTypeRef?
+        let chipAddress: UInt32
+
+        func matches(_ live: Self, confirmedOwnWrite: Bool = false) -> Bool {
+            guard chipAddress == live.chipAddress else { return false }
+            if let id = registryEntryID, let liveID = live.registryEntryID {
+                return id == liveID
+            }
+            // A rescan can wrap the same proxy again. An unidentified wrapper
+            // cannot inherit another's write, but this request can confirm its own.
+            return confirmedOwnWrite || fallbackService === live.fallbackService
+        }
+    }
+
+    typealias Confirmation = (endpoint: Endpoint, wrote: Bool)
+
+    /// Consecutive requests from one drag can land on the same hardware step.
+    /// Only the serial DDC queue records and verifies these writes.
+    final class Writes {
+        private var endpoint: Endpoint?
+        var volume: BrightnessSupport.SpeakerLevel?
+        var muted: Bool?
+
+        func begin(on endpoint: Endpoint) {
+            guard self.endpoint?.matches(endpoint) != true else { return }
+            self.endpoint = endpoint
+            volume = nil
+            muted = nil
+        }
+    }
+
+    final class Request {
+        private weak var owner: SpeakerSliderFeedback?
+        private(set) weak var previous: Request?
+        let output: Output?
+        var writes = Writes()
+        var isCurrent: Bool { owner?.latest === self }
+
+        fileprivate init(owner: SpeakerSliderFeedback, previous: Request?, output: Output?) {
+            self.owner = owner
+            self.previous = previous
+            self.output = output
+        }
+
+        func confirmed(_ play: @escaping () -> Void) {
+            guard let owner, owner.latest === self else { return }
+            owner.playOnRelease = play
+            owner.playIfReady()
+        }
+    }
+
+    private let currentOutput: () -> Output?
+    private var editingOutput: Output?
+    private var editing = false
+    private var latest: Request?
+    private var playOnRelease: (() -> Void)?
+
+    init(currentOutput: @escaping () -> Output?) {
+        self.currentOutput = currentOutput
+    }
+
+    func request() -> Request {
+        // Arrow keys and accessibility actions may send a single value write.
+        let request = Request(owner: self, previous: editing ? latest : nil,
+                              output: editing ? editingOutput : currentOutput())
+        latest = request
+        playOnRelease = nil
+        return request
+    }
+
+    func editingChanged(_ editing: Bool) {
+        if editing {
+            cancel()
+            editingOutput = currentOutput()
+        }
+        self.editing = editing
+        playIfReady()
+    }
+
+    func cancel() {
+        editing = false
+        editingOutput = nil
+        latest = nil
+        playOnRelease = nil
+    }
+
+    private func playIfReady() {
+        guard !editing, let play = playOnRelease else { return }
+        // The queued output check still belongs to this request until the next edit or cancellation.
+        playOnRelease = nil
+        play()
+    }
+}

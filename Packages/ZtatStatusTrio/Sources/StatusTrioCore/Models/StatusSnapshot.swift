@@ -1,0 +1,265 @@
+import Foundation
+
+struct BatteryStatus: Equatable, Sendable {
+    let rawPercentage: Int?
+    let isPresent: Bool
+    let isCharging: Bool
+    let isCharged: Bool
+    let timeToFullChargeMinutes: Int?
+    let timeToEmptyMinutes: Int?
+    let isLowPowerMode: Bool
+    let isConnectedToPower: Bool
+    /// The percentage macOS stops charging at when a charge limit is in
+    /// effect. Nil when the battery may reach 100%. The system estimate targets
+    /// this limit instead of 100%.
+    let chargeLimitPercent: Int?
+
+    init(
+        rawPercentage: Int?,
+        isPresent: Bool,
+        isCharging: Bool,
+        isCharged: Bool = false,
+        timeToFullChargeMinutes: Int? = nil,
+        timeToEmptyMinutes: Int? = nil,
+        isLowPowerMode: Bool,
+        isConnectedToPower: Bool,
+        chargeLimitPercent: Int? = nil
+    ) {
+        self.rawPercentage = rawPercentage
+        self.isPresent = isPresent
+        self.isCharging = isCharging
+        self.isCharged = isCharged
+        self.timeToFullChargeMinutes = timeToFullChargeMinutes
+        self.timeToEmptyMinutes = timeToEmptyMinutes
+        self.isLowPowerMode = isLowPowerMode
+        self.isConnectedToPower = isConnectedToPower
+        self.chargeLimitPercent = chargeLimitPercent
+    }
+
+    var percentage: Int {
+        guard isPresent else { return 100 }
+        let value = rawPercentage ?? 100
+        return min(100, max(0, value))
+    }
+
+    static let placeholder = BatteryStatus(
+        rawPercentage: 100,
+        isPresent: true,
+        isCharging: false,
+        isLowPowerMode: false,
+        isConnectedToPower: false
+    )
+
+    /// A battery-less reading, used by the developer-only no-battery preview so
+    /// the settings pane can show how the UI looks on a Mac with no battery.
+    static let absent = BatteryStatus(
+        rawPercentage: nil,
+        isPresent: false,
+        isCharging: false,
+        isLowPowerMode: false,
+        isConnectedToPower: false
+    )
+
+    /// A battery-less reading that keeps the current Low Power Mode, used by the
+    /// no-battery preview so the ring can still show the Low Power Mode colour.
+    static func absent(lowPowerMode: Bool) -> BatteryStatus {
+        BatteryStatus(
+            rawPercentage: nil,
+            isPresent: false,
+            isCharging: false,
+            isLowPowerMode: lowPowerMode,
+            isConnectedToPower: false
+        )
+    }
+}
+
+enum WiFiState: Equatable, Sendable {
+    case connected
+    case notAssociated
+    case off
+    case noInternet
+    case hotspot
+    case temporary
+    case shared
+    case unavailable
+
+    var isNetworkAssociated: Bool {
+        switch self {
+        case .connected, .noInternet, .hotspot, .temporary, .shared:
+            true
+        case .notAssociated, .off, .unavailable:
+            false
+        }
+    }
+}
+
+enum WiFiNameAccess: Equatable, Sendable {
+    case notDetermined
+    case authorized
+    case denied
+    case restricted
+}
+
+struct WiFiStatus: Equatable, Sendable {
+    let state: WiFiState
+    let rssi: Int?
+    let ssid: String?
+    let nameAccess: WiFiNameAccess
+    let band: WiFiFrequencyBand?
+
+    init(
+        state: WiFiState,
+        rssi: Int?,
+        ssid: String? = nil,
+        nameAccess: WiFiNameAccess = .notDetermined,
+        band: WiFiFrequencyBand? = nil
+    ) {
+        self.state = state
+        self.rssi = rssi
+        self.ssid = ssid
+        self.nameAccess = nameAccess
+        self.band = band
+    }
+
+    static let placeholder = WiFiStatus(state: .unavailable, rssi: nil)
+}
+
+extension WiFiStatus {
+    /// True while a network name is expected but not known yet: the popover shows
+    /// no subtitle until the fresh read delivers the name, instead of flashing the
+    /// generic state text first.
+    var isAwaitingName: Bool {
+        state.isNetworkAssociated
+            && nameAccess == .authorized
+            && (ssid ?? "").isEmpty
+    }
+}
+
+enum VolumeControlSource: Equatable, Sendable {
+    case unavailable
+    case native
+    case directDDC
+    case betterDisplay
+}
+
+struct VolumeStatus: Equatable, Sendable {
+    let scalar: Double?
+    let isMuted: Bool
+    /// True when the app muted the device itself because the user drove the
+    /// volume to exactly zero. A user's manual mute is never flagged here.
+    let isAutoMuted: Bool
+    let muteState: VolumeMuteState
+    let deviceName: String?
+    let currentDevice: AudioOutputDevice?
+    let outputDevices: [AudioOutputDevice]
+    let canSetVolume: Bool
+    let canMute: Bool
+    let controlSource: VolumeControlSource
+    let externalVolumeTransitionGeneration: UInt64
+
+    init(
+        scalar: Double?,
+        isMuted: Bool,
+        deviceName: String?,
+        currentDevice: AudioOutputDevice? = nil,
+        outputDevices: [AudioOutputDevice] = [],
+        canSetVolume: Bool? = nil,
+        canMute: Bool? = nil,
+        isAutoMuted: Bool = false,
+        muteState: VolumeMuteState? = nil,
+        externalVolumeTransitionGeneration: UInt64 = 0,
+        controlSource: VolumeControlSource = .unavailable
+    ) {
+        self.scalar = scalar
+        self.isMuted = isMuted
+        self.isAutoMuted = isAutoMuted
+        self.muteState = muteState ?? (isMuted ? .muted : .unmuted)
+        self.deviceName = deviceName
+        self.currentDevice = currentDevice
+        self.outputDevices = outputDevices
+        self.canSetVolume = canSetVolume ?? (scalar != nil)
+        self.canMute = canMute ?? (scalar != nil)
+        self.controlSource = controlSource
+        self.externalVolumeTransitionGeneration =
+            externalVolumeTransitionGeneration
+    }
+
+    static let placeholder = VolumeStatus(
+        scalar: nil,
+        isMuted: false,
+        deviceName: nil
+    )
+}
+
+extension VolumeStatus {
+    /// Whether two readings differ only in the live level (`scalar`).
+    ///
+    /// A drag emits a new level many times a second. The panel coalesces those
+    /// pure level changes so the volume row does not invalidate SwiftUI on every
+    /// tick (#263). Everything else — mute, the device set, availability, the
+    /// control source, an external transition — must publish immediately.
+    ///
+    /// Device entries carry their own volume, and the native reader stamps the
+    /// current device with the live scalar, so the comparison ignores the
+    /// per-device volume fields and keeps only device identity.
+    func changesOnlyLevel(comparedTo other: VolumeStatus) -> Bool {
+        isMuted == other.isMuted
+            && isAutoMuted == other.isAutoMuted
+            && muteState == other.muteState
+            && deviceName == other.deviceName
+            && currentDevice?.replacingVolume(nil) == other.currentDevice?.replacingVolume(nil)
+            && outputDevices.map { $0.replacingVolume(nil) }
+                == other.outputDevices.map { $0.replacingVolume(nil) }
+            && canSetVolume == other.canSetVolume
+            && canMute == other.canMute
+            && controlSource == other.controlSource
+            && externalVolumeTransitionGeneration == other.externalVolumeTransitionGeneration
+    }
+
+    func replacingExternalVolumeTransitionGeneration(
+        _ generation: UInt64,
+        controlSource: VolumeControlSource? = nil
+    ) -> VolumeStatus {
+        VolumeStatus(
+            scalar: scalar,
+            isMuted: isMuted,
+            deviceName: deviceName,
+            currentDevice: currentDevice,
+            outputDevices: outputDevices,
+            canSetVolume: canSetVolume,
+            canMute: canMute,
+            isAutoMuted: isAutoMuted,
+            muteState: muteState,
+            externalVolumeTransitionGeneration: generation,
+            controlSource: controlSource ?? self.controlSource
+        )
+    }
+}
+
+struct StatusSnapshot: Equatable, Sendable {
+    let battery: BatteryStatus
+    let wifi: WiFiStatus
+    let connection: NetworkConnection
+    let volume: VolumeStatus
+    let brightness: BrightnessStatus
+
+    init(
+        battery: BatteryStatus,
+        wifi: WiFiStatus,
+        connection: NetworkConnection = .unknown,
+        volume: VolumeStatus,
+        brightness: BrightnessStatus = .placeholder
+    ) {
+        self.battery = battery
+        self.wifi = wifi
+        self.connection = connection
+        self.volume = volume
+        self.brightness = brightness
+    }
+
+    static let placeholder = StatusSnapshot(
+        battery: .placeholder,
+        wifi: .placeholder,
+        volume: .placeholder
+    )
+}

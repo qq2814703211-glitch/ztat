@@ -1,0 +1,163 @@
+import AppKit
+import os
+
+private let singleInstanceLogger = Logger(
+    subsystem: "com.lingsmbp.StatusTrio",
+    category: "SingleInstance"
+)
+
+// The packaged launcher and swift run share the same AppKit entry point.
+@MainActor
+@_cdecl("StatusTrioRunApplication")
+public func runStatusTrioApplication() {
+    let application = NSApplication.shared
+    let delegate = AppDelegate()
+    application.delegate = delegate
+    application.run()
+}
+
+@MainActor
+public final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var environment: AppEnvironment?
+    private var singleInstanceGuard: SingleInstanceGuard?
+    private let updaterManager = UpdaterManager.shared
+
+    public override init() {
+        super.init()
+    }
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+        // macOS 26+ defaults to the native glass surfaces; the key can opt out.
+        // Registered here (not in the view) so ImageRenderer/unit-test hosts that
+        // never launch the app keep the deterministic translucent wash.
+        UserDefaults.standard.register(defaults: [PanelCardSurfaceExperiment.defaultsKey: true])
+        let backgroundUITesting = BackgroundUITestingConfiguration(
+            arguments: ProcessInfo.processInfo.arguments
+        )
+        guard !backgroundUITesting.rejectsLaunch else {
+            for diagnostic in backgroundUITesting.diagnostics {
+                dockActivationLogger.error("\(diagnostic, privacy: .public)")
+            }
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
+        switch SingleInstanceGuard.acquire() {
+        case .acquired(let guardInstance):
+            self.singleInstanceGuard = guardInstance
+        case .rejected(let rejection):
+            reportSingleInstanceRejection(rejection)
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
+        let environment = AppEnvironment.live(backgroundUITesting: backgroundUITesting)
+        self.environment = environment
+        environment.start()
+        updaterManager.start(activationPolicy: environment.activationPolicy)
+    }
+
+    /// Keeps "another copy is running" and "the lock is unusable" apart in the
+    /// log. Both end the launch: running a second instance is never the
+    /// fallback.
+    private func reportSingleInstanceRejection(_ rejection: SingleInstanceGuard.Rejection) {
+        switch rejection {
+        case .alreadyRunning:
+            singleInstanceLogger.notice(
+                "another StatusTrio instance holds the lock; terminating"
+            )
+        case .lockUnavailable(let reason):
+            singleInstanceLogger.error(
+                "single-instance lock is unusable, terminating: \(reason, privacy: .public)"
+            )
+        }
+    }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        environment?.stop()
+    }
+
+    /// #295: `pmset -a disablesleep 1` is a persisted system setting, so quitting
+    /// while the lid toggle is on must write it back to 0. `.terminateLater`
+    /// lets the helper call finish first; the delayed reply is a stop path so an
+    /// unreachable helper can never hang quit.
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let environment, environment.store.sleepControl.needsTerminationCleanup else {
+            return .terminateNow
+        }
+        let sleepControl = environment.store.sleepControl
+        Task { @MainActor in
+            await sleepControl.shutdown()
+            self.replyToTermination()
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            self.replyToTermination()
+        }
+        return .terminateLater
+    }
+
+    private var didReplyToTermination = false
+
+    private func replyToTermination() {
+        guard !didReplyToTermination else { return }
+        didReplyToTermination = true
+        NSApplication.shared.reply(toApplicationShouldTerminate: true)
+    }
+
+    public func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        guard let environment else { return false }
+
+        let event = AppleEventSenderResolver.currentActivation()
+        let placement = environment.settings.appIconPlacement
+        let action = DockActivationAction.resolve(
+            event: event,
+            showsPersistentDockIcon: placement.showsDockIcon,
+            backgroundUITesting: environment.backgroundUITesting,
+            hasVisibleOnboarding: environment.onboardingWindowController.window?.isVisible == true
+        )
+        let settingsWindow = environment.settingsWindowController.window
+        dockActivationLogger.notice(
+            """
+            reopen callback event=\(event.kind.rawValue, privacy: .public) \
+            class=\(event.eventClass ?? 0) id=\(event.eventID ?? 0) \
+            sender=\(event.senderBundleIdentifier ?? "Unknown", privacy: .public) \
+            senderPID=\(event.senderPID ?? 0) \
+            placement=\(placement.rawValue, privacy: .public) \
+            policy=\(sender.activationPolicy().rawValue) hasVisibleWindows=\(flag) \
+            settingsExists=\(settingsWindow != nil) settingsVisible=\(settingsWindow?.isVisible ?? false) \
+            settingsKey=\(settingsWindow?.isKeyWindow ?? false) action=\(action.rawValue, privacy: .public)
+            """
+        )
+        switch action {
+        case .showPopover:
+            environment.statusBarController.togglePopover(
+                anchoredAtScreenPoint: NSEvent.mouseLocation
+            )
+        case .openSettings:
+            environment.settingsWindowController.show()
+        case .none:
+            break
+        }
+        // The selected action owns presentation; AppKit must not also restore
+        // an existing Settings window through its default reopen behavior.
+        return false
+    }
+
+    public func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard let environment else { return nil }
+
+        return AppDockMenu.make(
+            localization: environment.localization,
+            target: self,
+            action: #selector(handleDockMenuSettings)
+        )
+    }
+
+    @objc private func handleDockMenuSettings() {
+        environment?.settingsWindowController.show()
+    }
+}

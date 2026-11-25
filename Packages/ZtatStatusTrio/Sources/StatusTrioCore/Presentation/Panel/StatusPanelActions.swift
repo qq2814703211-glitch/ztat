@@ -1,0 +1,435 @@
+import CoreAudio
+import Foundation
+
+@MainActor
+final class StatusPanelActions {
+    private let outputDevices: () -> [AudioOutputDevice]
+    private let selectOutputDevice: (AudioOutputDevice) -> Void
+    private let inputDevices: () -> [AudioInputDevice]
+    private let selectInputDevice: (AudioInputDevice) -> Void
+    private let setVolumeCommand: (Double) -> Void
+    private let beginVolumeCommand: () -> Void
+    private let finishVolumeCommand: () -> Void
+    private let setBrightnessCommand: (String, Double) -> Void
+    private let finishBrightnessCommand: (String) -> Void
+    private let beginBrightnessCommand: (String) -> Void
+    private let toggleMuteCommand: () -> Void
+    private let setInputScalarCommand: (Double, UUID) -> Void
+    private let toggleInputMuteCommand: () -> Void
+    private let outputPreferences: () -> AudioOutputListPreferences
+    private let bluetoothDevices: () -> [BluetoothDevice]
+    private let bluetoothAvailability: () -> BluetoothAvailability
+    private let refreshBluetoothCommand: () -> Void
+    private let requestBluetoothAuthorizationCommand: () -> Void
+    private let openBluetoothPermissionSettingsCommand: () -> Void
+    private let setBluetoothPowerCommand: (Bool) -> Void
+    private let performBluetoothActionCommand: (BluetoothDevice) -> Void
+    private let requestDisconnectCommand: (BluetoothDevice) -> Void
+    private let disconnectConfirmationAddress: () -> String?
+    private let cancelDisconnectCommand: () -> Void
+    private let requestBatteryLevelsCommand: (String) -> Void
+    private let releaseBatteryLevelsCommand: (String) -> Void
+    private let requestNearbyBatteryDevicesCommand: (String) -> Void
+    private let releaseNearbyBatteryDevicesCommand: (String, Bool) -> Void
+    private let setListeningModeCommand: (BluetoothListeningMode, String) -> Void
+    private let listeningModePresentations: () -> [String: BluetoothListeningModePresentation]
+    private let listeningModeDevices: () -> [BluetoothDevice]
+    private let batteryStatus: () -> BatteryStatus
+    private let activateBatteryDetails: (BatteryPowerState) -> Void
+    private let closeBatteryDetails: () -> Void
+    private let requestChargeToFullNowCommand: () -> Void
+    private let wifiNameAccess: () -> WiFiNameAccess
+    private let activateWiFiDetails: (WiFiNameAccess) -> Void
+    private let closeWiFiDetails: () -> Void
+    private let setWiFiPowerCommand: (Bool) -> Void
+    private let refreshWiFiCommand: (WiFiNameAccess) -> Void
+    private let openWiredDetails: () -> Void
+    private let closeWiredDetails: () -> Void
+    private let holdBluetoothSummary: () -> Void
+    private let releaseBluetoothSummary: () -> Void
+    private let refreshVolumeListeningModes: () -> Void
+    private let stopVolumeListeningModes: () -> Void
+    private let selectInputSourceCommand: (String) -> Void
+    private let setVPNPowerCommand: (Bool) -> Void
+
+    private static let summaryBatteryLevelsToken = "bluetooth.summary"
+    private static let nearbyBatteryDevicesToken = "bluetooth.summary.nearbyBatteryDevices"
+
+    var outputDeviceListPreferences: AudioOutputListPreferences {
+        outputPreferences()
+    }
+
+    /// Narrow injection keeps command routing testable without introducing a
+    /// second monitor abstraction around the existing store.
+    init(
+        outputDevices: @escaping () -> [AudioOutputDevice] = { [] },
+        selectOutput: @escaping (AudioOutputDevice) -> Void = { _ in },
+        inputDevices: @escaping () -> [AudioInputDevice] = { [] },
+        selectInput: @escaping (AudioInputDevice) -> Void = { _ in },
+        setVolume: @escaping (Double) -> Void = { _ in },
+        beginVolumeAdjustment: @escaping () -> Void = {},
+        finishVolumeAdjustment: @escaping () -> Void = {},
+        setBrightness: @escaping (String, Double) -> Void = { _, _ in },
+        finishBrightnessAdjustment: @escaping (String) -> Void = { _ in },
+        beginBrightnessAdjustment: @escaping (String) -> Void = { _ in },
+        toggleMute: @escaping () -> Void = {},
+        setInputScalar: @escaping (Double, UUID) -> Void = { _, _ in },
+        toggleInputMute: @escaping () -> Void = {},
+        outputPreferences: @escaping () -> AudioOutputListPreferences = { .default },
+        bluetoothDevices: @escaping () -> [BluetoothDevice] = { [] },
+        bluetoothAvailability: @escaping () -> BluetoothAvailability = { .idle },
+        refreshBluetooth: @escaping () -> Void = {},
+        requestBluetoothAuthorization: @escaping () -> Void = {},
+        openBluetoothPermissionSettings: @escaping () -> Void = {},
+        setBluetoothPower: @escaping (Bool) -> Void = { _ in },
+        performBluetoothAction: @escaping (BluetoothDevice) -> Void = { _ in },
+        requestDisconnect: @escaping (BluetoothDevice) -> Void = { _ in },
+        disconnectConfirmationAddress: @escaping () -> String? = { nil },
+        cancelDisconnect: @escaping () -> Void = {},
+        requestBatteryLevels: @escaping (String) -> Void = { _ in },
+        releaseBatteryLevels: @escaping (String) -> Void = { _ in },
+        requestNearbyBatteryDevices: @escaping (String) -> Void = { _ in },
+        releaseNearbyBatteryDevices: @escaping (String, Bool) -> Void = { _, _ in },
+        setListeningMode: @escaping (BluetoothListeningMode, String) -> Void = { _, _ in },
+        listeningModePresentations: @escaping () -> [String: BluetoothListeningModePresentation] = { [:] },
+        listeningModeDevices: (() -> [BluetoothDevice])? = nil,
+        batteryStatus: @escaping () -> BatteryStatus = { .placeholder },
+        activateBatteryDetails: @escaping (BatteryPowerState) -> Void = { _ in },
+        closeBatteryDetails: @escaping () -> Void = {},
+        requestChargeToFullNow: @escaping () -> Void = {},
+        wifiNameAccess: @escaping () -> WiFiNameAccess = { .notDetermined },
+        activateWiFiDetails: @escaping (WiFiNameAccess) -> Void = { _ in },
+        closeWiFiDetails: @escaping () -> Void = {},
+        setWiFiPower: @escaping (Bool) -> Void = { _ in },
+        setVPNPower: @escaping (Bool) -> Void = { _ in },
+        refreshWiFi: @escaping (WiFiNameAccess) -> Void = { _ in },
+        openWiredDetails: @escaping () -> Void = {},
+        closeWiredDetails: @escaping () -> Void = {},
+        holdBluetoothSummary: @escaping () -> Void = {},
+        releaseBluetoothSummary: @escaping () -> Void = {},
+        refreshVolumeListeningModes: @escaping () -> Void = {},
+        stopVolumeListeningModes: @escaping () -> Void = {},
+        selectInputSource: @escaping (String) -> Void = { _ in }
+    ) {
+        self.outputDevices = outputDevices
+        self.selectOutputDevice = selectOutput
+        self.inputDevices = inputDevices
+        self.selectInputDevice = selectInput
+        self.setVolumeCommand = setVolume
+        self.beginVolumeCommand = beginVolumeAdjustment
+        self.finishVolumeCommand = finishVolumeAdjustment
+        self.setBrightnessCommand = setBrightness
+        self.finishBrightnessCommand = finishBrightnessAdjustment
+        self.beginBrightnessCommand = beginBrightnessAdjustment
+        self.toggleMuteCommand = toggleMute
+        self.setInputScalarCommand = setInputScalar
+        self.toggleInputMuteCommand = toggleInputMute
+        self.outputPreferences = outputPreferences
+        self.bluetoothDevices = bluetoothDevices
+        self.bluetoothAvailability = bluetoothAvailability
+        self.refreshBluetoothCommand = refreshBluetooth
+        self.requestBluetoothAuthorizationCommand = requestBluetoothAuthorization
+        self.openBluetoothPermissionSettingsCommand = openBluetoothPermissionSettings
+        self.setBluetoothPowerCommand = setBluetoothPower
+        self.performBluetoothActionCommand = performBluetoothAction
+        self.requestDisconnectCommand = requestDisconnect
+        self.disconnectConfirmationAddress = disconnectConfirmationAddress
+        self.cancelDisconnectCommand = cancelDisconnect
+        self.requestBatteryLevelsCommand = requestBatteryLevels
+        self.releaseBatteryLevelsCommand = releaseBatteryLevels
+        self.requestNearbyBatteryDevicesCommand = requestNearbyBatteryDevices
+        self.releaseNearbyBatteryDevicesCommand = releaseNearbyBatteryDevices
+        self.setListeningModeCommand = setListeningMode
+        self.listeningModePresentations = listeningModePresentations
+        self.listeningModeDevices = listeningModeDevices ?? bluetoothDevices
+        self.batteryStatus = batteryStatus
+        self.activateBatteryDetails = activateBatteryDetails
+        self.closeBatteryDetails = closeBatteryDetails
+        self.requestChargeToFullNowCommand = requestChargeToFullNow
+        self.wifiNameAccess = wifiNameAccess
+        self.activateWiFiDetails = activateWiFiDetails
+        self.closeWiFiDetails = closeWiFiDetails
+        self.setWiFiPowerCommand = setWiFiPower
+        self.refreshWiFiCommand = refreshWiFi
+        self.openWiredDetails = openWiredDetails
+        self.closeWiredDetails = closeWiredDetails
+        self.holdBluetoothSummary = holdBluetoothSummary
+        self.releaseBluetoothSummary = releaseBluetoothSummary
+        self.refreshVolumeListeningModes = refreshVolumeListeningModes
+        self.stopVolumeListeningModes = stopVolumeListeningModes
+        self.selectInputSourceCommand = selectInputSource
+        self.setVPNPowerCommand = setVPNPower
+    }
+
+    convenience init(
+        store: SystemStatusStore,
+        settings: SettingsStore,
+        inputSourceController: InputSourceController? = nil,
+        chargeToFullNow: ChargeToFullNowController? = nil
+    ) {
+        self.init(
+            outputDevices: { store.liveVolume.outputDevices },
+            selectOutput: { device in store.selectOutputDevice(device) },
+            inputDevices: { store.liveInput.devices },
+            selectInput: { device in store.selectInputDevice(device.id) },
+            setVolume: { scalar in store.setVolume(scalar) },
+            beginVolumeAdjustment: { store.beginVolumeAdjustment() },
+            finishVolumeAdjustment: { store.finishVolumeAdjustment() },
+            setBrightness: { id, scalar in store.setBrightness(scalar, forDisplayID: id) },
+            finishBrightnessAdjustment: { id in store.finishBrightnessAdjustment(displayID: id) },
+            beginBrightnessAdjustment: { id in store.beginBrightnessAdjustment(displayID: id) },
+            toggleMute: { store.toggleMute() },
+            setInputScalar: { scalar, requestID in store.setInputScalar(scalar, requestID: requestID) },
+            toggleInputMute: { store.toggleInputMute() },
+            outputPreferences: { settings.outputDeviceListPreferences },
+            bluetoothDevices: { store.bluetoothDevices.devices },
+            bluetoothAvailability: { store.bluetoothDevices.availability },
+            refreshBluetooth: { store.bluetoothDevices.refreshFromUser() },
+            requestBluetoothAuthorization: { store.requestBluetoothAuthorization() },
+            openBluetoothPermissionSettings: { store.openBluetoothPermissionSettings() },
+            setBluetoothPower: { enabled in
+                Task { await store.setBluetoothPower(enabled) }
+            },
+            performBluetoothAction: { store.bluetoothDevices.performDeviceAction(for: $0) },
+            requestDisconnect: { store.bluetoothDevices.requestDisconnectConfirmation(for: $0) },
+            disconnectConfirmationAddress: { store.bluetoothDevices.pendingDisconnectConfirmation },
+            cancelDisconnect: { store.bluetoothDevices.cancelDisconnectConfirmation() },
+            requestBatteryLevels: { store.bluetoothDevices.requestBatteryLevels($0) },
+            releaseBatteryLevels: { store.bluetoothDevices.releaseBatteryLevels($0) },
+            requestNearbyBatteryDevices: { store.bluetoothDevices.requestNearbyBatteryDevices($0) },
+            releaseNearbyBatteryDevices: { store.bluetoothDevices.releaseNearbyBatteryDevices($0, keepingResults: $1) },
+            setListeningMode: { mode, address in
+                guard settings.showsBluetoothListeningMode else { return }
+                store.bluetoothListeningModes.setMode(mode, forAddress: address)
+            },
+            listeningModePresentations: {
+                store.bluetoothListeningModes.presentations
+            },
+            listeningModeDevices: {
+                guard settings.showsBluetoothListeningMode else {
+                    return store.bluetoothDevices.devices
+                }
+                let config = ListeningModePreview.Configuration(
+                    isEnabled: settings.isListeningModePreviewActive,
+                    deviceName: settings.bluetoothListeningModePreviewDeviceName,
+                    deviceCount: settings.bluetoothListeningModePreviewDeviceCount,
+                    languageCode: settings.bluetoothListeningModePreviewLanguage
+                )
+                return store.bluetoothDevices.devices + ListeningModePreview.devices(for: config)
+            },
+            batteryStatus: { store.popupSnapshot.battery },
+            activateBatteryDetails: {
+                store.batteryDetails.configure(options: settings.batteryPowerDisplayOptions,
+                    showsHighEnergyApps: settings.showsHighEnergyApps)
+                store.batteryDetails.activate(state: $0)
+            },
+            closeBatteryDetails: { store.batteryDetails.deactivate() },
+            requestChargeToFullNow: {
+                chargeToFullNow?.performPrimaryAction()
+            },
+            wifiNameAccess: { store.popupSnapshot.wifi.nameAccess },
+            activateWiFiDetails: { store.wifiNetworks.activate(nameAccess: $0) },
+            closeWiFiDetails: { store.wifiNetworks.deactivate() },
+            setWiFiPower: { store.setWiFiPower($0) },
+            setVPNPower: { store.setVPNPower($0) },
+            refreshWiFi: { store.wifiNetworks.refreshNow(nameAccess: $0) },
+            openWiredDetails: { store.activatePrimaryLinkPanel() },
+            closeWiredDetails: { store.closePrimaryLinkPanel() },
+            holdBluetoothSummary: { store.bluetoothDevices.holdVisibleSurface(BluetoothDeviceController.bluetoothSummarySurfaceToken) },
+            releaseBluetoothSummary: { store.bluetoothDevices.releaseVisibleSurface(BluetoothDeviceController.bluetoothSummarySurfaceToken) },
+            refreshVolumeListeningModes: {
+                guard store.isPopoverVisible else { return }
+                // The real listening-mode master switch is off: stop discovery,
+                // drop every presentation and clear parked HUAWEI/SPP device
+                // state so no controls are presented anywhere. Re-enabling it
+                // reruns this same refresh path to rediscover live devices.
+                guard settings.showsBluetoothListeningMode else {
+                    // Master switch off: release the kept-alive Redmi control
+                    // sessions too, not just the panel-scoped state.
+                    store.bluetoothListeningModes.shutdown()
+                    return
+                }
+                let config = ListeningModePreview.Configuration(
+                    isEnabled: settings.isListeningModePreviewActive,
+                    deviceName: settings.bluetoothListeningModePreviewDeviceName,
+                    deviceCount: settings.bluetoothListeningModePreviewDeviceCount,
+                    languageCode: settings.bluetoothListeningModePreviewLanguage
+                )
+                store.bluetoothListeningModes.previewMode = config.isEnabled
+                store.bluetoothListeningModes.refresh(
+                    devices: store.bluetoothDevices.devices + ListeningModePreview.devices(for: config)
+                )
+            },
+            stopVolumeListeningModes: { store.bluetoothListeningModes.stop() },
+            selectInputSource: { [weak inputSourceController] id in
+                inputSourceController?.select(id: id)
+            }
+        )
+    }
+
+    func setVolume(_ scalar: Double) {
+        guard scalar.isFinite else { return }
+        setVolumeCommand(min(1, max(0, scalar)))
+    }
+
+    func beginVolumeAdjustment() {
+        beginVolumeCommand()
+    }
+
+    func finishVolumeAdjustment() {
+        finishVolumeCommand()
+    }
+
+    func setBrightness(_ scalar: Double, forDisplayID displayID: String) {
+        guard scalar.isFinite, !displayID.isEmpty else { return }
+        setBrightnessCommand(displayID, min(1, max(0, scalar)))
+    }
+
+    func beginBrightnessAdjustment(displayID: String) {
+        guard !displayID.isEmpty else { return }
+        beginBrightnessCommand(displayID)
+    }
+
+    func finishBrightnessAdjustment(displayID: String) {
+        guard !displayID.isEmpty else { return }
+        finishBrightnessCommand(displayID)
+    }
+
+    func toggleMute() {
+        toggleMuteCommand()
+    }
+
+    func selectOutput(_ key: PanelAudioDeviceID) {
+        guard let device = outputDevices().first(where: {
+            $0.id == key.id && (key.uid == nil || $0.uid == key.uid)
+        }) else { return }
+        selectOutputDevice(device)
+    }
+
+    func setInputScalar(_ scalar: Double, requestID: UUID = UUID()) {
+        guard scalar.isFinite else { return }
+        setInputScalarCommand(min(1, max(0, scalar)), requestID)
+    }
+
+    func toggleInputMute() {
+        toggleInputMuteCommand()
+    }
+
+    func selectInput(_ key: PanelAudioDeviceID) {
+        guard let device = inputDevices().first(where: {
+            $0.id == key.id && (key.uid == nil || $0.uid == key.uid)
+        }) else { return }
+        selectInputDevice(device)
+    }
+
+    func refreshBluetooth() { refreshBluetoothCommand() }
+    func requestBluetoothAuthorization() { requestBluetoothAuthorizationCommand() }
+    func openBluetoothPermissionSettings() { openBluetoothPermissionSettingsCommand() }
+    func setBluetoothPower(_ enabled: Bool) { setBluetoothPowerCommand(enabled) }
+
+    func bluetoothPowerNeedsConfirmation(_ enabled: Bool) -> Bool {
+        !enabled && BluetoothRadioPowerPolicy.requiresConfirmation(beforeTurningOff: bluetoothDevices())
+    }
+    func selectInputSource(_ id: String) { selectInputSourceCommand(id) }
+
+    func performBluetoothAction(address: String) {
+        guard let device = bluetoothDevice(address: address),
+              BluetoothDeviceActionPolicy.isActionable(device),
+              !BluetoothDeviceActionPolicy.requiresConfirmation(for: device) else { return }
+        performBluetoothActionCommand(device)
+    }
+
+    func rowTapped(address: String) {
+        guard let device = bluetoothDevice(address: address),
+              BluetoothDeviceActionPolicy.isActionable(device) else { return }
+        if BluetoothDeviceActionPolicy.requiresConfirmation(for: device) {
+            requestDisconnectCommand(device)
+        } else {
+            performBluetoothActionCommand(device)
+        }
+    }
+
+    func confirmBluetoothDisconnect(address: String) {
+        let key = BluetoothBatteryReader.normalizedAddress(address)
+        guard !key.isEmpty,
+              BluetoothBatteryReader.normalizedAddress(disconnectConfirmationAddress() ?? "") == key,
+              let device = bluetoothDevice(address: key),
+              BluetoothDeviceActionPolicy.isActionable(device),
+              BluetoothDeviceActionPolicy.requiresConfirmation(for: device) else { return }
+        performBluetoothActionCommand(device)
+    }
+
+    func requestDisconnect(address: String) {
+        guard let device = bluetoothDevice(address: address),
+              BluetoothDeviceActionPolicy.isActionable(device),
+              BluetoothDeviceActionPolicy.requiresConfirmation(for: device) else { return }
+        requestDisconnectCommand(device)
+    }
+
+    func cancelDisconnect() { cancelDisconnectCommand() }
+
+    func updateBluetoothBatteryLevelsClaim(enabled: Bool) {
+        guard enabled,
+              BluetoothSummary.presentation(
+                availability: bluetoothAvailability(),
+                devices: bluetoothDevices(),
+                batteryLevels: [:]
+              ).hasConnectedDevices else {
+            releaseBatteryLevelsCommand(Self.summaryBatteryLevelsToken)
+            return
+        }
+        requestBatteryLevelsCommand(Self.summaryBatteryLevelsToken)
+    }
+
+    func updateBluetoothNearbyBatteryClaim(enabled: Bool) {
+        if enabled {
+            requestNearbyBatteryDevicesCommand(Self.nearbyBatteryDevicesToken)
+        } else {
+            releaseNearbyBatteryDevicesCommand(Self.nearbyBatteryDevicesToken, false)
+        }
+    }
+
+    func setListeningMode(address: String, mode: BluetoothListeningMode) {
+        let key = BluetoothBatteryReader.normalizedAddress(address)
+        guard !key.isEmpty,
+              listeningModeDevices().contains(where: {
+                  BluetoothBatteryReader.normalizedAddress($0.id) == key
+                      && BluetoothDeviceActionPolicy.isActionable($0)
+              }),
+              let presentation = listeningModePresentations()[key],
+              presentation.availableModes.contains(mode) else { return }
+        setListeningModeCommand(mode, key)
+    }
+
+    func batteryDetailsAppeared() { activateBatteryDetails(BatteryPowerState(batteryStatus())) }
+    func batteryDetailsClosed() { closeBatteryDetails() }
+    func requestChargeToFullNow() { requestChargeToFullNowCommand() }
+    func wifiDetailsOpened() { activateWiFiDetails(wifiNameAccess()) }
+    func wifiDetailsClosed() { closeWiFiDetails() }
+    func wiredDetailsOpened() { openWiredDetails() }
+    func wiredDetailsClosed() { closeWiredDetails() }
+    func bluetoothSummaryAppeared() { holdBluetoothSummary() }
+
+    func bluetoothSummaryDisappeared() {
+        releaseBluetoothSummary()
+        releaseBatteryLevelsCommand(Self.summaryBatteryLevelsToken)
+        releaseNearbyBatteryDevicesCommand(Self.nearbyBatteryDevicesToken, true)
+    }
+
+    func volumeListAppeared() { refreshVolumeListeningModes() }
+
+    /// Called by the visible summary task on reopen, output-route changes, or
+    /// device/preview changes. The controller owns finite readiness retries.
+    func volumeListChanged() { refreshVolumeListeningModes() }
+    func volumeListDisappeared() { stopVolumeListeningModes() }
+    func setWiFiPower(_ enabled: Bool) { setWiFiPowerCommand(enabled) }
+
+    func setVPNPower(_ enabled: Bool) { setVPNPowerCommand(enabled) }
+
+    func refreshWiFi() { refreshWiFiCommand(wifiNameAccess()) }
+    private func bluetoothDevice(address: String) -> BluetoothDevice? {
+        let key = BluetoothBatteryReader.normalizedAddress(address)
+        guard !key.isEmpty else { return nil }
+        return bluetoothDevices().first { BluetoothBatteryReader.normalizedAddress($0.id) == key }
+    }
+}

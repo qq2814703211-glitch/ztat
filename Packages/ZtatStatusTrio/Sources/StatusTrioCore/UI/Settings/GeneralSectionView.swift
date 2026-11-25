@@ -1,0 +1,281 @@
+import SwiftUI
+
+struct GeneralSectionView: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject var localization: Localization
+    var globalShortcutController: GlobalShortcutController? = nil
+    /// Used only to report which quick actions are available right now. Optional
+    /// so previews/tests can render the pane without the full app graph.
+    var statusStore: SystemStatusStore? = nil
+    var chargeToFullNow: ChargeToFullNowController? = nil
+    /// The Settings root supplies its stable session. Standalone panes own a local fallback.
+    @StateObject private var transferSession: SettingsTransferSession
+
+    init(
+        store: SettingsStore,
+        localization: Localization,
+        globalShortcutController: GlobalShortcutController? = nil,
+        statusStore: SystemStatusStore? = nil,
+        chargeToFullNow: ChargeToFullNowController? = nil,
+        transferSession: SettingsTransferSession? = nil
+    ) {
+        self.store = store
+        self.localization = localization
+        self.globalShortcutController = globalShortcutController
+        self.statusStore = statusStore
+        self.chargeToFullNow = chargeToFullNow
+        _transferSession = StateObject(wrappedValue: transferSession ?? SettingsTransferSession(
+            store: store, localization: localization
+        ))
+    }
+
+    @ObservedObject private var launchAtLogin: LaunchAtLoginManager = .shared
+    @ObservedObject private var updaterManager: UpdaterManager = .shared
+    @ObservedObject private var helper: PrivilegedHelperManager = .shared
+
+    var body: some View {
+        SettingsPage {
+            systemGroup
+            quickActionsGroup
+            statusCheckGroup
+            SettingsTransferView(
+                session: transferSession,
+                localization: localization
+            )
+            // ZTAT-PATCH: Upstream telemetry and Sparkle updates are removed in ztat.
+            if updaterManager.canCheckForUpdates {
+                updatesGroup
+            }
+        }
+        .onAppear {
+            launchAtLogin.refresh()
+        }
+    }
+
+    private var systemGroup: some View {
+        // The pane is already "General", so the first card carries no repeated
+        // section title.
+        SettingsGroup {
+            // Language
+            SettingsRow(
+                title: localization.string(.settingsLanguage),
+                subtitle: localization.string(.settingsLanguageDescription),
+                leading: { SettingsIcon(symbol: "globe", tint: .blue) },
+                trailing: {
+                    Picker(
+                        localization.string(.settingsLanguage),
+                        selection: Binding(
+                            get: { localization.preference },
+                            set: { localization.setPreference($0) }
+                        )
+                    ) {
+                        Text(localization.string(.settingsLanguageFollowSystem))
+                            .tag(LanguagePreference.system)
+
+                        ForEach(AppLanguage.allCases) { lang in
+                            Text(lang.nativeName)
+                                .tag(LanguagePreference.language(lang))
+                        }
+                    }
+                    .labelsHidden()
+                    .settingsMenuPickerWidth()
+                }
+            )
+
+            SettingsDivider()
+
+            // Launch at Login
+            VStack(alignment: .leading, spacing: 6) {
+                SettingsToggleRow(
+                    symbol: "power",
+                    tint: .cyan,
+                    title: localization.string(.settingsLaunchAtLogin),
+                    subtitle: localization.string(.settingsLaunchAtLoginDescription),
+                    isOn: launchAtLogin.isEnabledBinding
+                )
+                .disabled(!launchAtLogin.isAvailable)
+
+                if launchAtLogin.status == .requiresApproval {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(localization.string(.settingsLaunchAtLoginRequiresApproval))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button(localization.string(.settingsLaunchAtLoginOpenLoginItems)) {
+                            launchAtLogin.openLoginItemsSettings()
+                        }
+                        .controlSize(.small)
+                    }
+                    .padding(.horizontal, SettingsMetrics.rowPaddingH)
+                    .padding(.bottom, 6)
+                }
+
+                if launchAtLogin.didFailLastOperation {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Image(systemName: "exclamationmark.octagon.fill")
+                            .foregroundStyle(.red)
+                        Text(localization.string(.settingsLaunchAtLoginFailure))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, SettingsMetrics.rowPaddingH)
+                    .padding(.bottom, 6)
+                }
+            }
+
+        }
+    }
+
+    private var quickActionsGroup: some View {
+        SettingsGroup(localization.string(.settingsQuickActionsTitle)) {
+            if let globalShortcutController {
+                ShortcutSettingsRow(
+                    store: store,
+                    controller: globalShortcutController,
+                    localization: localization
+                )
+
+                SettingsDivider()
+            }
+
+            rightClickActionRow
+        }
+    }
+
+    private var statusCheckGroup: some View {
+        SettingsGroup(localization.string(.settingsStatusCheckTitle)) {
+            // Status refresh interval (#255): one row per power source, using
+            // the original settings-row and slider component. The description
+            // stays once on the first row; neither row shows step ticks.
+            refreshIntervalRow(
+                title: localization.string(.settingsRefreshIntervalOnBattery),
+                subtitle: localization.string(.settingsRefreshIntervalDescription),
+                value: $store.refreshIntervalOnBatterySeconds
+            )
+
+            SettingsDivider()
+
+            refreshIntervalRow(
+                title: localization.string(.settingsRefreshIntervalOnPower),
+                value: $store.refreshIntervalOnPowerSeconds
+            )
+        }
+    }
+
+    private func refreshIntervalRow(
+        title: String,
+        subtitle: String? = nil,
+        value: Binding<Double>
+    ) -> some View {
+        SettingsRow(
+            "arrow.clockwise",
+            tint: .orange,
+            title: title,
+            subtitle: subtitle
+        ) {
+            HStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { value.wrappedValue },
+                        set: { value.wrappedValue = $0.rounded() }
+                    ),
+                    in: SettingsStore.refreshIntervalRange
+                )
+                .frame(width: 130)
+                .controlSize(.small)
+                .accessibilityLabel(title)
+                .accessibilityValue(
+                    localization.format(
+                        .settingsRefreshIntervalValue,
+                        Int(value.wrappedValue)
+                    )
+                )
+
+                Text(
+                    localization.format(
+                        .settingsRefreshIntervalValue,
+                        Int(value.wrappedValue)
+                    )
+                )
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .trailing)
+            }
+        }
+    }
+
+    private var rightClickActionAvailability: MenuBarQuickActionAvailability {
+        MenuBarQuickActionAvailability(
+            lowPowerMode: store.controlsLowPowerMode && helper.isReady,
+            chargeToFullNow: chargeToFullNow?.isSettingAvailable ?? false,
+            mute: statusStore?.liveVolume.canMute ?? false,
+            wifi: (statusStore?.snapshot.wifi.state ?? .unavailable) != .unavailable
+        )
+    }
+
+    /// Single-select right-click action (#209). The selected action's glyph is
+    /// the row's tile; an unavailable selection shows a hint that a right-click
+    /// will fall back to the menu rather than doing nothing.
+    private var rightClickActionRow: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            SettingsRow(
+                store.menuBarRightClickAction.settingsSymbol,
+                tint: .blue,
+                title: localization.string(.menuBarRightClickAction),
+                subtitle: localization.string(.menuBarRightClickActionDescription)
+            ) {
+                Picker(
+                    localization.string(.menuBarRightClickAction),
+                    selection: $store.menuBarRightClickAction
+                ) {
+                    ForEach(MenuBarRightClickAction.allCases) { action in
+                        Text(localization.string(action.titleKey)).tag(action)
+                    }
+                }
+                .labelsHidden()
+                .settingsMenuPickerWidth()
+            }
+
+            if !rightClickActionAvailability.isAvailable(store.menuBarRightClickAction) {
+                SettingsHintRow(text: localization.string(.menuBarRightClickUnavailableHint))
+            }
+        }
+    }
+
+    private var updatesGroup: some View {
+        SettingsGroup(localization.string(.settingsUpdatesTitle)) {
+            SettingsToggleRow(
+                symbol: "arrow.triangle.2.circlepath",
+                tint: .green,
+                title: localization.string(.settingsUpdatesAutomatic),
+                isOn: updaterManager.automaticallyChecksForUpdatesBinding
+            )
+        }
+    }
+
+    private var analyticsGroup: some View {
+        SettingsGroup(localization.string(.settingsAnalyticsTitle)) {
+            SettingsToggleRow(
+                symbol: "chart.bar.xaxis",
+                tint: .purple,
+                title: localization.string(.onboardingAnalyticsToggle),
+                subtitle: localization.string(.settingsAnalyticsDescription),
+                isOn: Binding(
+                    get: { store.sharesAnonymousAnalytics },
+                    set: { store.setSharesAnonymousAnalytics($0) }
+                )
+            )
+
+            SettingsDivider()
+
+            Link(
+                localization.string(.settingsAnalyticsPrivacyDetails),
+                destination: URL(string: "https://github.com/lingyired/status-trio/blob/main/docs/privacy-telemetry.md")!
+            )
+            .font(.system(size: 11))
+            .padding(.horizontal, SettingsMetrics.rowPaddingH)
+            .padding(.vertical, 9)
+        }
+    }
+}

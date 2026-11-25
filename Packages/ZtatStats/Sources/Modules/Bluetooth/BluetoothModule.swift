@@ -1,0 +1,151 @@
+//
+//  main.swift
+//  Bluetooth
+//
+//  Created by Serhiy Mytrovtsiy on 08/06/2021.
+//  Using Swift 5.0.
+//  Running on macOS 10.15.
+//
+//  Copyright © 2021 Serhiy Mytrovtsiy. All rights reserved.
+//
+
+import Foundation
+// ZTAT-PATCH: SwiftPM module rename Kit -> StatsKit
+import StatsKit
+import CoreBluetooth
+
+public struct BLEDevice: Codable {
+    let address: String
+    var name: String
+    var uuid: UUID?
+    
+    var RSSI: Int? = nil
+    var batteryLevel: [KeyValue_t] = []
+    
+    var isConnected: Bool = false
+    var isPaired: Bool = false
+    
+    var vendorId: Int? = nil
+    var productId: Int? = nil
+    
+    var peripheral: CBPeripheral? = nil
+    var isPeripheralInitialized: Bool = false
+    
+    var id: String {
+        get { self.uuid?.uuidString ?? self.address }
+    }
+    
+    var state: Bool {
+        get { Store.shared.bool(key: "ble_\(self.id)", defaultValue: false) }
+    }
+    var notificationThreshold: String {
+        Store.shared.string(key: "ble_\(self.id)_notification", defaultValue: "")
+    }
+    
+    private enum CodingKeys: String, CodingKey {
+        case address, name, uuid, RSSI, batteryLevel, isConnected, isPaired, vendorId, productId
+    }
+    
+    init(address: String, name: String, uuid: UUID?, RSSI: Int?, batteryLevel: [KeyValue_t], isConnected: Bool, isPaired: Bool, vendorId: Int? = nil, productId: Int? = nil) {
+        self.address = address
+        self.name = name
+        self.uuid = uuid
+        self.RSSI = RSSI
+        self.batteryLevel = batteryLevel
+        self.isConnected = isConnected
+        self.isPaired = isPaired
+        self.vendorId = vendorId
+        self.productId = productId
+    }
+    
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.address = try container.decode(String.self, forKey: .address)
+        self.name = try container.decode(String.self, forKey: .name)
+        self.uuid = try? container.decode(UUID.self, forKey: .uuid)
+        self.RSSI = try? container.decode(Int.self, forKey: .RSSI)
+        self.batteryLevel = try container.decode(Array<KeyValue_t>.self, forKey: .batteryLevel)
+        self.isConnected = try container.decode(Bool.self, forKey: .isConnected)
+        self.isPaired = try container.decode(Bool.self, forKey: .isPaired)
+        self.vendorId = try? container.decode(Int.self, forKey: .vendorId)
+        self.productId = try? container.decode(Int.self, forKey: .productId)
+    }
+    
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(self.address, forKey: .address)
+        try container.encode(self.name, forKey: .name)
+        try container.encode(self.uuid, forKey: .uuid)
+        try container.encode(self.RSSI, forKey: .RSSI)
+        try container.encode(self.batteryLevel, forKey: .batteryLevel)
+        try container.encode(self.isConnected, forKey: .isConnected)
+        try container.encode(self.isPaired, forKey: .isPaired)
+        try container.encode(self.vendorId, forKey: .vendorId)
+        try container.encode(self.productId, forKey: .productId)
+    }
+}
+
+public class Bluetooth: Module {
+    private var devicesReader: DevicesReader?
+    private let popupView: Popup = Popup()
+    private let settingsView: Settings = Settings()
+    private let notificationsView: Notifications
+    
+    public init() {
+        self.notificationsView = Notifications(.bluetooth)
+        
+        super.init(
+            moduleType: .bluetooth,
+            // ZTAT-PATCH: Pass SwiftPM Bundle.module for config.plist loading
+            bundle: Bundle.module,
+            popup: self.popupView,
+            settings: self.settingsView,
+            notifications: self.notificationsView
+        )
+        guard self.available else { return }
+        
+        self.devicesReader = DevicesReader { [weak self] value in
+            self?.batteryCallback(value)
+        }
+        
+        self.settingsView.callback = { [weak self] in
+            self?.devicesReader?.read()
+        }
+        
+        self.setReaders([self.devicesReader])
+    }
+    
+    private func batteryCallback(_ raw: [BLEDevice]?) {
+        guard let value = raw, self.enabled else { return }
+        
+        let active = value.filter{ $0.isPaired || ($0.isConnected && !$0.batteryLevel.isEmpty) }
+        // ZTAT-PATCH: Report concise Bluetooth device count/battery badge to ZtatStatsHost
+        let connected = active.filter { $0.isConnected }
+        if let firstBattery = connected.first(where: { !$0.batteryLevel.isEmpty })?.batteryLevel.first?.value {
+            self.reportLiveBadge("\(firstBattery)%")
+        } else {
+            self.reportLiveBadge("\(connected.count)")
+        }
+        DispatchQueue.main.async(execute: {
+            self.popupView.batteryCallback(active)
+            self.settingsView.setList(active)
+            self.notificationsView.callback(active)
+        })
+        
+        var list: [Stack_t] = []
+        active.forEach { (d: BLEDevice) in
+            if d.state {
+                d.batteryLevel.forEach { (p: KeyValue_t) in
+                    list.append(Stack_t(key: "\(d.address)-\(p.key)", value: "\(p.value)%", label: d.name))
+                }
+            }
+        }
+        
+        self.menuBar.widgets.filter{ $0.isActive }.forEach { (w: SWidget) in
+            switch w.item {
+            case let widget as StackWidget: widget.setValues(list)
+            default: break
+            }
+        }
+    }
+}

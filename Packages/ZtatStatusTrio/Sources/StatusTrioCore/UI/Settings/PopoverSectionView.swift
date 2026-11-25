@@ -1,0 +1,339 @@
+import AppKit
+import SwiftUI
+
+struct PopoverSectionView: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject var statusStore: SystemStatusStore
+    @EnvironmentObject private var localization: Localization
+
+    var body: some View {
+        SettingsPage {
+            backgroundStyleGroup
+            scrollDirectionGroup
+            popupOrderGroup
+            openBehaviorGroup
+        }
+    }
+
+    private var scrollDirectionGroup: some View {
+        SettingsGroup(
+            localization.string(.settingsPopupVolumeScrollGroup),
+            footnote: localization.string(.settingsPopupVolumeScrollDirectionDescription)
+        ) {
+            SettingsToggleRow(
+                symbol: "arrow.up.arrow.down",
+                tint: .indigo,
+                title: localization.string(.settingsPopupVolumeScrollNatural),
+                subtitle: localization.string(.settingsPopupVolumeScrollNaturalDescription),
+                isOn: $store.popupVolumeNaturalScrolling
+            )
+            SettingsRow(
+                "dial.low", tint: .indigo,
+                title: localization.string(.settingsPopupScrollWheelStep),
+                subtitle: localization.string(.settingsPopupScrollWheelStepDescription)
+            ) {
+                HStack(spacing: 8) {
+                    Slider(
+                        value: Binding(
+                            get: { store.popupScrollWheelStepPercent },
+                            set: { store.popupScrollWheelStepPercent = ($0 * 2).rounded() / 2 }
+                        ),
+                        in: SettingsStore.popupScrollWheelStepPercentRange
+                    )
+                        .frame(width: 130)
+                        .controlSize(.small)
+                        .accessibilityLabel(localization.string(.settingsPopupScrollWheelStep))
+                        .accessibilityValue(wheelStepLabel)
+                    Text(wheelStepLabel)
+                        .monospacedDigit()
+                        .frame(minWidth: 48, alignment: .trailing)
+                }
+            }
+        }
+    }
+
+    private var wheelStepLabel: String {
+        (store.popupScrollWheelStepPercent / 100).formatted(
+            .percent.precision(.fractionLength(0...1)).locale(localization.resolvedLanguage.locale)
+        )
+    }
+
+    private var openBehaviorGroup: some View {
+        SettingsGroup(localization.string(.settingsPanelOpenBehaviorTitle)) {
+            SettingsToggleRow(
+                symbol: "cursorarrow.motionlines",
+                tint: .purple,
+                title: localization.string(.settingsPanelShowsPanelOnHover),
+                subtitle: localization.string(.settingsPanelShowsPanelOnHoverDescription),
+                isOn: $store.showsPanelOnHover
+            )
+            SettingsDivider()
+            SettingsToggleRow(
+                symbol: "rectangle.split.2x1",
+                tint: .purple,
+                title: localization.string(.settingsPanelShowsDetailsAlongside),
+                subtitle: localization.string(.settingsPanelShowsDetailsAlongsideDescription),
+                isOn: $store.showsPanelDetailsAlongside
+            )
+            SettingsDivider()
+            SettingsToggleRow(
+                symbol: "arrow.uturn.backward",
+                tint: .purple,
+                title: localization.string(.settingsPanelReturnsToSummaryOnOpen),
+                subtitle: localization.string(.settingsPanelReturnsToSummaryOnOpenDescription),
+                isOn: Binding(
+                    get: { store.restoresPanelDetailsOnOpen },
+                    set: { store.restoresPanelDetailsOnOpen = $0 }
+                )
+            )
+            SettingsDivider()
+            SettingsToggleRow(
+                symbol: "macwindow.on.rectangle",
+                tint: .purple,
+                title: localization.string(.settingsPanelKeepOpenForComparison),
+                subtitle: localization.string(.settingsPanelKeepOpenForComparisonDescription),
+                isOn: $store.keepsPanelOpenWhenOpeningSettings
+            )
+        }
+    }
+
+    private var backgroundStyleGroup: some View {
+        SettingsGroup(
+            localization.string(.settingsPanelBackgroundTitle),
+            footnote: PanelBackgroundStyle.isLiquidGlassAvailable
+                ? nil
+                : localization.string(.settingsPanelBackgroundStyleLiquidGlassUnavailable)
+        ) {
+            SettingsPictureRow(
+                "square.on.square",
+                tint: .purple,
+                title: localization.string(.settingsPanelBackgroundStyle),
+                subtitle: localization.string(.settingsPanelBackgroundStyleDescription),
+                selection: $store.panelBackgroundStyle,
+                options: PanelBackgroundStyle.availableStyles,
+                previewSize: CGSize(width: 72, height: 48),
+                caption: { style in
+                    switch style {
+                    case .liquidGlass:
+                        return localization.string(.settingsPanelBackgroundStyleLiquidGlass)
+                    case .classicMaterial:
+                        return localization.string(.settingsPanelBackgroundStyleClassicMaterial)
+                    case .solid:
+                        return localization.string(.settingsPanelBackgroundStyleSolid)
+                    }
+                },
+                preview: { style in
+                    PanelBackgroundStylePreview(style: style)
+                }
+            )
+            SettingsDivider()
+            // A single switch drives both weight tiers: on restores the old,
+            // heavier look (semibold titles/values plus medium-weight
+            // captions); off keeps today's regular weight. That is why setting
+            // it also flips `statusPanelMediumTextEnabled` — do not split it
+            // into a second row or drop the medium flag, or the panel will no
+            // longer match the classic appearance.
+            SettingsToggleRow(
+                symbol: "bold",
+                tint: .purple,
+                title: localization.string(.settingsPanelBoldText),
+                subtitle: localization.string(.settingsPanelBoldTextDescription),
+                isOn: Binding(
+                    get: { store.statusPanelBoldTextEnabled },
+                    set: { store.applyPanelBoldTextToggle($0) }
+                )
+            )
+            SettingsDivider()
+            // Appearance also owns how the panel's level sliders look; the
+            // generic slider styling used to live on the General page (#359).
+            SettingsRow(
+                "slider.horizontal.3",
+                tint: .teal,
+                title: localization.string(.settingsPanelLevelSliderColor),
+                subtitle: localization.string(.settingsPanelLevelSliderColorDescription)
+            ) {
+                PanelLevelSliderColorRow(
+                    store: store,
+                    localization: localization
+                )
+            }
+            SettingsDivider()
+            SettingsToggleRow(
+                symbol: "rectangle.portrait.arrowtriangle.2.outward",
+                tint: .teal,
+                title: localization.string(.settingsPanelLevelSliderThickness),
+                subtitle: localization.string(.settingsPanelLevelSliderThicknessDescription),
+                isOn: $store.panelLevelSliderMatchesBrightnessThickness
+            )
+        }
+    }
+
+    // ZTAT-PATCH: Keep-awake (.quickActions) is owned by ZtatPowerGuard in ztat's unified hub.
+    private var visiblePopupSectionOrder: [PopupSection] {
+        store.popupSectionOrder.filter { $0 != .quickActions }
+    }
+
+    private var popupOrderGroup: some View {
+        SettingsGroup(
+            localization.string(.settingsPopupOrder),
+            footnote: localization.string(.settingsPopupOrderDescription)
+        ) {
+            SettingsCustomRow {
+                List {
+                    ForEach(visiblePopupSectionOrder) { section in
+                        HStack(alignment: .center, spacing: 8) {
+                            Toggle("", isOn: visibilityBinding(for: section))
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                                .accessibilityLabel(localization.string(section.titleKey))
+
+                            popupSectionIcon(section)
+                                .foregroundStyle(.secondary)
+                                .frame(width: 18, height: 18, alignment: .center)
+
+                            Text(localization.string(section.titleKey))
+                                .font(.system(size: 13))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                            PanelActionGlyph(
+                                systemName: "line.3.horizontal",
+                                font: .caption,
+                                size: 18
+                            )
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                        }
+                        .padding(.vertical, 3)
+                    }
+                    .onMove { source, destination in
+                        // ZTAT-PATCH: Reorder visible popup sections while keeping hidden .quickActions preserved.
+                        var reordered = visiblePopupSectionOrder
+                        reordered.move(fromOffsets: source, toOffset: destination)
+                        if store.popupSectionOrder.contains(.quickActions) {
+                            reordered.append(.quickActions)
+                        }
+                        store.setPopupSectionOrder(reordered)
+                    }
+                }
+                .listStyle(.inset)
+                .frame(height: popupOrderListHeight)
+            }
+        }
+    }
+
+    private func visibilityBinding(for section: PopupSection) -> Binding<Bool> {
+        Binding(
+            get: { store.enabledPopupSections.contains(section) },
+            set: { enabled in
+                let wasEnabled = store.enabledPopupSections.contains(section)
+                store.setPopupSection(section, enabled: enabled)
+
+                guard section == .bluetooth, enabled != wasEnabled else { return }
+                if enabled {
+                    NSApp.activate(ignoringOtherApps: true)
+                    statusStore.requestBluetoothAuthorization()
+                }
+            }
+        )
+    }
+
+    @ViewBuilder
+    private func popupSectionIcon(_ section: PopupSection) -> some View {
+        if section == .bluetooth {
+            BluetoothIcon(size: 16)
+        } else {
+            Image(systemName: section.systemImage)
+                .font(.system(size: 13))
+        }
+    }
+
+    private var popupOrderListHeight: CGFloat {
+        min(max(CGFloat(visiblePopupSectionOrder.count) * 32 + 12, 48), 180)
+    }
+}
+
+/// A miniature status panel used as the background-style preview card. It shows
+/// the panel background *and* the card surface that goes with it, so the three
+/// choices cannot look interchangeable: a translucent wash on Liquid Glass, a
+/// material wash on the frosted style, and an opaque system-surface card on
+/// Solid. The real window uses `NSGlassEffectView`, which SwiftUI cannot host in
+/// a settings swatch, so the glass entry is an honest visual approximation.
+private struct PanelBackgroundStylePreview: View {
+    let style: PanelBackgroundStyle
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            background
+            cardSwatch.padding(7)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.14), lineWidth: 1)
+        )
+    }
+
+    /// The miniature power card. Its surface follows the panel style the same way
+    /// the live cards do, so the preview communicates the card treatment, not just
+    /// the window fill.
+    private var cardSwatch: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Capsule()
+                .fill(Color.primary.opacity(0.55))
+                .frame(width: 30, height: 4)
+            Capsule()
+                .fill(Color.primary.opacity(0.28))
+                .frame(width: 22, height: 3)
+            Capsule()
+                .fill(Color.primary.opacity(0.28))
+                .frame(width: 26, height: 3)
+        }
+        .padding(7)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background { cardSurface }
+        .overlay(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.16), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private var cardSurface: some View {
+        switch style {
+        case .liquidGlass:
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color.primary.opacity(0.10))
+        case .classicMaterial:
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(.ultraThinMaterial)
+        case .solid:
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        }
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        switch style {
+        case .liquidGlass:
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [.white.opacity(0.35), .clear],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+        case .classicMaterial:
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.regularMaterial)
+        case .solid:
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(nsColor: .windowBackgroundColor))
+        }
+    }
+}
