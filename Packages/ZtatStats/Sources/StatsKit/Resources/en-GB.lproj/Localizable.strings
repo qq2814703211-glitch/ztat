@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Uninstall fan helper";
 "Approve in System Settings ▸ Login Items" = "Approve in System Settings ▸ Login Items";
 "Fan helper needs your approval" = "Fan helper needs your approval";
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "To control the fans, enable Stats in System Settings ▸ Login Items.";
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "To control the fans, enable ztat in System Settings ▸ Login Items.";
 "Open Login Items" = "Open Login Items";
 "Could not enable the fan helper" = "Could not enable the fan helper";
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again.";
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Open System Settings ▸ Login Items, make sure ztat is allowed in the background, then try again.";
 "Fan value" = "Fan value";
 "Turn off fan" = "Turn off fan";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "You are going to turn off the fan. This is not recommended action that can damage your Mac, are you sure you want to do that?";

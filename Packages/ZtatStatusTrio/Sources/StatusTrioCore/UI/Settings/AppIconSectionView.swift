@@ -10,6 +10,7 @@ struct AppIconSectionView: View {
     /// When non-`nil` the pane shows only that leaf subtopic beneath the App
     /// Icon category; `nil` keeps the original full-pane layout.
     var subtopic: SettingsSubtopic? = nil
+    var isEmbeddedInUnifiedSettings: Bool = false
     @EnvironmentObject private var localization: Localization
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -38,16 +39,21 @@ struct AppIconSectionView: View {
     @ViewBuilder
     private var fullAppIconContent: some View {
         iconGuideGroup
-        placementGroup
+        if !isEmbeddedInUnifiedSettings {
+            placementGroup
+        }
         menuBarGroup
         statusIconGroup
         MiddleIconSettingsGroup(store: store, statusStore: statusStore)
-        dockGroup
+        if !isEmbeddedInUnifiedSettings {
+            dockGroup
+        }
         AppIconRingView(
             store: store,
             statusStore: statusStore,
             bluetoothDevices: statusStore.bluetoothDevices,
-            hasBattery: statusStore.snapshot.battery.isPresent
+            hasBattery: statusStore.snapshot.battery.isPresent,
+            isEmbeddedInUnifiedSettings: isEmbeddedInUnifiedSettings
         )
         AppIconBottomIndicatorView(
             store: store,
@@ -63,17 +69,22 @@ struct AppIconSectionView: View {
             // Surface choice, menu-bar size, shared ring stroke, Dock background
             // and the icon guide all describe the icon as a whole.
             iconGuideGroup
-            placementGroup
+            if !isEmbeddedInUnifiedSettings {
+                placementGroup
+            }
             menuBarGroup
             statusIconGroup
-            dockGroup
+            if !isEmbeddedInUnifiedSettings {
+                dockGroup
+            }
         case .appIconRing:
             AppIconRingView(
                 store: store,
                 statusStore: statusStore,
                 bluetoothDevices: statusStore.bluetoothDevices,
                 hasBattery: statusStore.snapshot.battery.isPresent,
-                showsRingContentTitle: false
+                showsRingContentTitle: false,
+                isEmbeddedInUnifiedSettings: isEmbeddedInUnifiedSettings
             )
         case .appIconMiddleIcon:
             MiddleIconSettingsGroup(store: store, statusStore: statusStore,

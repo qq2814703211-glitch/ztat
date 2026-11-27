@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "解除安裝風扇輔助程式";
 "Approve in System Settings ▸ Login Items" = "在系統設定 ▸ 登入項目中核准"; // gemma4:31b
 "Fan helper needs your approval" = "風扇輔助工具需要您的核准"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "若要控制風扇，請在「系統設定」▸「登入項目」中啟用 Stats。"; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "若要控制風扇，請在「系統設定」▸「登入項目」中啟用 ztat。"; // gemma4:31b
 "Open Login Items" = "開啟登入項目"; // gemma4:31b
 "Could not enable the fan helper" = "無法啟用風扇助手"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "開啟「系統設定」▸「登入項目」，確認 Stats 已獲准在背景執行，然後再試一次。"; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "開啟「系統設定」▸「登入項目」，確認 ztat 已獲准在背景執行，然後再試一次。"; // gemma4:31b
 "Fan value" = "風扇轉速值";
 "Turn off fan" = "關閉風扇";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "您似乎要關閉您Mac的風扇。不建議進行此操作，因為這可能會造成Mac的損毀，您確定仍要關閉風扇嗎？";

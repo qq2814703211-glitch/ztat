@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Απεγκατάσταση fan helper";
 "Approve in System Settings ▸ Login Items" = "Εγκρίνετε στις Ρυθμίσεις συστήματος ▸ Αντικείμενα σύνδεσης"; // gemma4:31b
 "Fan helper needs your approval" = "Ο βοηθός ανεμιστήρα χρειάζεται την έγκρισή σας"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Για να ελέγξετε τους ανεμιστήρες, ενεργοποιήστε το Stats στις Ρυθμίσεις συστήματος ▸ Αντικείμενα σύνδεσης."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Για να ελέγξετε τους ανεμιστήρες, ενεργοποιήστε το ztat στις Ρυθμίσεις συστήματος ▸ Αντικείμενα σύνδεσης."; // gemma4:31b
 "Open Login Items" = "Ανοίξτε τα Αντικείμενα σύνδεσης"; // gemma4:31b
 "Could not enable the fan helper" = "Δεν ήταν δυνατή η ενεργοποίηση του βοηθητικού προγράμματος του ανεμιστήρα"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Ανοίξτε τις Ρυθμίσεις συστήματος ▸ Αντικείμενα σύνδεσης, βεβαιωθείτε ότι το Stats είναι επιτρεπτό στο παρασκήνιο, και στη συνέχεια δοκιμάστε ξανά."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Ανοίξτε τις Ρυθμίσεις συστήματος ▸ Αντικείμενα σύνδεσης, βεβαιωθείτε ότι το ztat είναι επιτρεπτό στο παρασκήνιο, και στη συνέχεια δοκιμάστε ξανά."; // gemma4:31b
 "Fan value" = "Τιμή ανεμιστήρα"; // gemma4:31b
 "Turn off fan" = "Απενεργοποίηση ανεμιστήρα"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Πρόκειται να απενεργοποιήσετε τον ανεμιστήρα. Αυτή είναι μια μη προτεινόμενη ενέργεια που μπορεί να προκαλέσει βλάβη στον Mac σας, είστε σίγουροι ότι θέλετε να το κάνετε αυτό;"; // gemma4:31b

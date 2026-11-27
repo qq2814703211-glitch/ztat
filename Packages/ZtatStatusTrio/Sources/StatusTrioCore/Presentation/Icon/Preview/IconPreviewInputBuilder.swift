@@ -63,7 +63,7 @@ enum IconPreviewInputBuilder {
         let inputSample = samples.inputSource
         let inputSourceDescriptor: InputSourceDescriptor? = inputSample.isAvailable
             ? InputSourceDescriptor(
-                id: "com.status-trio.preview.input-source",
+                id: "dev.ztat.status.preview.input-source",
                 localizedName: inputSample.shortLabel,
                 primaryLanguage: nil,
                 iconURL: nil,

@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Desinstalar auxiliar das ventoinhas";
 "Approve in System Settings ▸ Login Items" = "Aprovar nas Definições do Sistema ▸ Itens de início de sessão"; // gemma4:31b
 "Fan helper needs your approval" = "Ajudante da ventoinha precisa da sua aprovação"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Para controlar as ventoinhas, ative o Stats nas Definições do Sistema ▸ Itens de Início de Sessão."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Para controlar as ventoinhas, ative o ztat nas Definições do Sistema ▸ Itens de Início de Sessão."; // gemma4:31b
 "Open Login Items" = "Abrir itens de início de sessão"; // gemma4:31b
 "Could not enable the fan helper" = "Não foi possível ativar o assistente da ventoinha"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Abra as Definições do Sistema ▸ Itens de Início, certifique-se de que o Stats está permitido em segundo plano e tente novamente."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Abra as Definições do Sistema ▸ Itens de Início, certifique-se de que o ztat está permitido em segundo plano e tente novamente."; // gemma4:31b
 "Fan value" = "Valor da ventoinha";
 "Turn off fan" = "Desligar ventoinha"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Vai desligar a ventoinha. Esta não é uma ação recomendada que pode danificar o seu Mac, tem a certeza de que quer fazer isso?"; // gemma4:31b

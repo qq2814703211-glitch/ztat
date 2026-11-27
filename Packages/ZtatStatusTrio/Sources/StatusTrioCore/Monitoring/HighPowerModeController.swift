@@ -46,7 +46,7 @@ final class HighPowerModeController: ObservableObject {
     }
 
     init(
-        client: any HighPowerModeClienting = XPCPrivilegedHighPowerClient(),
+        client: any HighPowerModeClienting = ZtatPowerGuardHighPowerClient(),
         platformSupported: Bool = HighPowerModeController.supportsCurrentPlatform
     ) {
         self.client = client

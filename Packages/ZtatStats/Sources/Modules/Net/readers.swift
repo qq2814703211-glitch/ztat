@@ -103,7 +103,7 @@ extension CWChannel {
 internal class UsageReader: Reader<Network_Usage>, CWEventDelegate, CLLocationManagerDelegate {
     // ZTAT-PATCH: Zero-idle — do not start SCNetworkReachability until UsageReader.start() runs
     private var reachability: Reachability = Reachability(start: false)
-    private let variablesQueue = DispatchQueue(label: "eu.exelban.NetworkUsageReader")
+    private let variablesQueue = DispatchQueue(label: "dev.ztat.stats.NetworkUsageReader")
     private var _usage: Network_Usage = Network_Usage()
     public var usage: Network_Usage {
         get { self.variablesQueue.sync { self._usage } }
@@ -208,7 +208,7 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate, CLLocationMa
     
     private var lastDetailsReadTS: Date = .distantPast
     
-    private let detailsQueue = DispatchQueue(label: "eu.exelban.NetworkDetailsReader")
+    private let detailsQueue = DispatchQueue(label: "dev.ztat.stats.NetworkDetailsReader")
     private var _detailsInProgress: Bool = false
     private var detailsInProgress: Bool {
         get { self.variablesQueue.sync { self._detailsInProgress } }
@@ -680,36 +680,32 @@ internal class UsageReader: Reader<Network_Usage>, CWEventDelegate, CLLocationMa
     
     private func getPublicIP() {
         guard self.publicIPState else { return }
-        
-        struct Addr_s: Decodable {
-            let ipv4: String?
-            let ipv6: String?
-            let country: String?
+
+        struct IPifyResp: Decodable {
+            let ip: String?
         }
-        
-        DispatchQueue.global(qos: .userInitiated).async {
-            let response = syncShell("curl -s -4 https://ip.mac-stats.com")
-            if !response.isEmpty, let data = response.data(using: .utf8),
-               let addr = try? JSONDecoder().decode(Addr_s.self, from: data) {
-                if let ip = addr.ipv4, self.isIPv4(ip) {
-                    self.usage.raddr.v4 = ip
-                }
-                if let countryCode = addr.country {
-                    self.usage.raddr.countryCode = countryCode
-                }
-            }
+
+        // ZTAT-PATCH: Replace shell `curl https://ip.mac-stats.com` forks with native URLSession.
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 4
+        config.timeoutIntervalForResource = 5
+        let session = URLSession(configuration: config)
+
+        if let v4URL = URL(string: "https://api4.ipify.org?format=json") {
+            session.dataTask(with: v4URL) { [weak self] data, _, _ in
+                guard let self, let data,
+                      let resp = try? JSONDecoder().decode(IPifyResp.self, from: data),
+                      let ip = resp.ip, self.isIPv4(ip) else { return }
+                self.usage.raddr.v4 = ip
+            }.resume()
         }
-        DispatchQueue.global(qos: .userInitiated).async {
-            let response = syncShell("curl -s -6 https://ip.mac-stats.com")
-            if !response.isEmpty, let data = response.data(using: .utf8),
-               let addr = try? JSONDecoder().decode(Addr_s.self, from: data) {
-                if let ip = addr.ipv6, !self.isIPv4(ip) {
-                    self.usage.raddr.v6 = ip
-                }
-                if let countryCode = addr.country {
-                    self.usage.raddr.countryCode = countryCode
-                }
-            }
+        if let v6URL = URL(string: "https://api6.ipify.org?format=json") {
+            session.dataTask(with: v6URL) { [weak self] data, _, _ in
+                guard let self, let data,
+                      let resp = try? JSONDecoder().decode(IPifyResp.self, from: data),
+                      let ip = resp.ip, !self.isIPv4(ip) else { return }
+                self.usage.raddr.v6 = ip
+            }.resume()
         }
     }
     
@@ -970,7 +966,7 @@ internal class ConnectivityReaderWrapper {
 
 // inspired by https://github.com/samiyr/SwiftyPing
 internal class ConnectivityReader: Reader<Network_Connectivity> {
-    private let variablesQueue = DispatchQueue(label: "eu.exelban.ConnectivityReaderQueue")
+    private let variablesQueue = DispatchQueue(label: "dev.ztat.stats.ConnectivityReaderQueue")
     
     private let identifier = UInt16.random(in: 0..<UInt16.max)
     private var fingerprint: UUID = UUID()

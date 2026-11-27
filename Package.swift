@@ -15,6 +15,8 @@ let package = Package(
         .package(path: "Packages/ZtatPowerGuard"),
         .package(path: "Packages/ZtatStats"),
         .package(path: "Packages/ZtatStatusTrio"),
+        .package(path: "Packages/ZtatIsland"),
+        .package(path: "Packages/ZtatCleaner"),
         .package(path: "Packages/ZtatVorssaint")
     ],
     targets: [
@@ -25,6 +27,8 @@ let package = Package(
                 .product(name: "ZtatPowerGuard", package: "ZtatPowerGuard"),
                 .product(name: "ZtatStatsHost", package: "ZtatStats"),
                 .product(name: "ZtatStatusTrio", package: "ZtatStatusTrio"),
+                .product(name: "ZtatIsland", package: "ZtatIsland"),
+                .product(name: "ZtatCleaner", package: "ZtatCleaner"),
                 .product(name: "ZtatVorssaint", package: "ZtatVorssaint")
             ],
             path: "Sources/ZtatApp",
@@ -42,6 +46,8 @@ let package = Package(
                 .product(name: "ZtatStatsHost", package: "ZtatStats"),
                 .product(name: "StatsKit", package: "ZtatStats"),
                 .product(name: "ZtatStatusTrio", package: "ZtatStatusTrio"),
+                .product(name: "ZtatIsland", package: "ZtatIsland"),
+                .product(name: "ZtatCleaner", package: "ZtatCleaner"),
                 .product(name: "ZtatVorssaint", package: "ZtatVorssaint")
             ],
             path: "Tests/ZtatTests"

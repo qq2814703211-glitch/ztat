@@ -327,7 +327,10 @@ enum ScreenshotSupport {
                                        copied: Bool,
                                        confirmationEnabled: Bool) -> Bool {
         switch defaultAction {
-        case .none: return true
+        case .none:
+            // ZTAT-PATCH: Honor screenshotPreviewEnabled ("截图后弹出展示与编辑框", default OFF)
+            // even when defaultAction is .none so screenshots stay silent unless opted in.
+            return confirmationEnabled
         case .edit: return false
         case .save, .saveAndCopy, .copy:
             return confirmationEnabled
@@ -344,17 +347,19 @@ enum ScreenshotSupport {
 
     /// The whole decision `route` makes, read from the person's settings: a
     /// successful action shows the confirmation for its chosen duration or
-    /// nothing at all, while a failed or partial action, or no action, gets
-    /// the recovery preview with its longer timer.
+    /// nothing at all, while a failed or partial automatic action gets the
+    /// recovery preview with its longer timer.
     static func quickPreviewPresentation(defaultAction: ScreenshotDefaultAction,
                                          saved: Bool,
                                          copied: Bool,
                                          defaults: UserDefaults) -> QuickPreviewPresentation {
+        let confirmationEnabled = defaults.bool(forKey: DefaultsKey.screenshotPreviewEnabled)
         guard shouldShowQuickPreview(
             defaultAction: defaultAction, saved: saved, copied: copied,
-            confirmationEnabled: defaults.bool(forKey: DefaultsKey.screenshotPreviewEnabled))
+            confirmationEnabled: confirmationEnabled)
         else { return .hidden }
-        guard automaticActionSucceeded(defaultAction, saved: saved, copied: copied) else {
+        if defaultAction != .none,
+           !automaticActionSucceeded(defaultAction, saved: saved, copied: copied) {
             return .shown(dismissInterval: recoveryPreviewDismissInterval)
         }
         // A stored value that is not a number reads as the default duration,

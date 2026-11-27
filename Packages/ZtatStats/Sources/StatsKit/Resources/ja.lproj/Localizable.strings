@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "ファンヘルパーをアンインストール"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "システム設定 ▸ ログイン項目で承認してください"; // gemma4:31b
 "Fan helper needs your approval" = "ファンヘルパーにはあなたの承認が必要です"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "ファンを制御するには、「システム設定」▸「ログイン項目」でStatsを有効にしてください。"; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "ファンを制御するには、「システム設定」▸「ログイン項目」でztatを有効にしてください。"; // gemma4:31b
 "Open Login Items" = "ログイン項目を開く"; // gemma4:31b
 "Could not enable the fan helper" = "ファンヘルパーを有効にできませんでした"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "「システム設定 ▸ ログイン項目」を開き、Statsがバックグラウンドで許可されていることを確認してから、もう一度お試しください。"; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "「システム設定 ▸ ログイン項目」を開き、ztatがバックグラウンドで許可されていることを確認してから、もう一度お試しください。"; // gemma4:31b
 "Fan value" = "ファンの表示単位";
 "Turn off fan" = "ファンの停止";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "ファンの停止はmacに大きなダメージを与える可能性がある為、推奨されません。本当に実行しますか？";

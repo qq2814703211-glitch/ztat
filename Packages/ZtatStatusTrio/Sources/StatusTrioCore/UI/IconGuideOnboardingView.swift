@@ -71,10 +71,7 @@ struct IconGuideOnboardingView: View {
             // exactly the same height and the consent never floats in a big
             // empty block below one page's content.
             VStack(alignment: .leading, spacing: 12) {
-                if settings.telemetryConsentVersion == 0 {
-                    telemetryConsentRow
-                }
-
+                // ZTAT-PATCH: Upstream telemetry consent & external GitHub privacy link permanently omitted in ztat.
                 footer
             }
             .padding(.horizontal, 28)
@@ -197,7 +194,7 @@ struct IconGuideOnboardingView: View {
 
                 Link(
                     localization.string(.settingsAnalyticsPrivacyDetails),
-                    destination: URL(string: "https://github.com/lingyired/status-trio/blob/main/docs/privacy-telemetry.md")!
+                    destination: URL(string: "about:blank")!
                 )
                 .font(.system(size: 11))
             }

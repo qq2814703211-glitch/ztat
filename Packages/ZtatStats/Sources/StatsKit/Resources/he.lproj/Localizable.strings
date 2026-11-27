@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "הסר את עוזר המאוורר"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "אשר בהגדרות המערכת ▸ פריטי התחברות"; // gemma4:31b
 "Fan helper needs your approval" = "עוזר המאוורר זקוק לאישורך"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "כדי לשלוט במאווררים, הפעל את Stats בהגדרות המערכת ▸ פריטי התחלה."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "כדי לשלוט במאווררים, הפעל את ztat בהגדרות המערכת ▸ פריטי התחלה."; // gemma4:31b
 "Open Login Items" = "פתח פריטי התחברות"; // gemma4:31b
 "Could not enable the fan helper" = "לא ניתן להפעיל את כלי העזר למאוורר"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "פתח את הגדרות המערכת ▸ פריטי התחברות, וודא ש-Stats מורשה ברקע, ואז נסה שוב."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "פתח את הגדרות המערכת ▸ פריטי התחברות, וודא ש-ztat מורשה ברקע, ואז נסה שוב."; // gemma4:31b
 "Fan value" = "ערך המאוורר"; // gemma4:31b
 "Turn off fan" = "כבה את המאוורר"; // translategemma:4b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "אתה עומד לכבות את המאוורר. זוהי פעולה שאינה מומלצת שעלולה לגרום נזק למחשב ה-Mac שלך, האם אתה בטוח שברצונך לעשות זאת?"; // gemma4:31b

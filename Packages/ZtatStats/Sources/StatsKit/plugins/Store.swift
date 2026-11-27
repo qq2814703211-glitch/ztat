@@ -12,6 +12,10 @@
 import Cocoa
 import ZtatCore
 
+public extension Notification.Name {
+    static let ztatStatsStoreDidChange = Notification.Name("dev.ztat.stats.storeDidChange")
+}
+
 public class Store {
     public static let shared = Store()
 
@@ -50,6 +54,7 @@ public class Store {
         } else {
             self.defaults.removeObject(forKey: key)
         }
+        NotificationCenter.default.post(name: .ztatStatsStoreDidChange, object: nil, userInfo: ["key": key])
     }
 
     public func exist(key: String) -> Bool {
@@ -109,6 +114,7 @@ public class Store {
         }
         self.defaults.removePersistentDomain(forName: self.suiteName)
         self.defaults.synchronize()
+        NotificationCenter.default.post(name: .ztatStatsStoreDidChange, object: nil, userInfo: ["bulk": true])
     }
 
     public func export(to url: URL) {
@@ -139,5 +145,6 @@ public class Store {
 
         self.defaults.setPersistentDomain(importedDict, forName: self.suiteName)
         self.defaults.synchronize()
+        NotificationCenter.default.post(name: .ztatStatsStoreDidChange, object: nil, userInfo: ["bulk": true])
     }
 }

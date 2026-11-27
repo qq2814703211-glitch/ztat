@@ -187,12 +187,11 @@ final class AppEnvironment {
             settings: settings,
             actions: StatusPanelActions(store: store, settings: settings)
         )
-        if !isEmbeddedHost {
-            lowPowerModeControlSynchronizer.start(
-                settings: settings,
-                helper: PrivilegedHelperManager.shared
-            )
-        }
+        // ZTAT-PATCH: Always synchronize Low/High Power Mode controls via ZtatPowerGuard-backed helper.
+        lowPowerModeControlSynchronizer.start(
+            settings: settings,
+            helper: PrivilegedHelperManager.shared
+        )
         store.bindInputSettings(settings)
         store.bindLocalIPSettings(settings)
         store.bindApplicationEnergySettings(settings)
@@ -203,6 +202,16 @@ final class AppEnvironment {
         store.bindExternalBrightnessSettings(settings)
         store.start()
         // ZTAT-PATCH: Upstream telemetry permanently disabled in ztat.
+    }
+
+    /// ZTAT-PATCH: Unified Settings window lifecycle bridge so embedded Settings restores
+    /// Audio device-list refresh, preview resource ownership, and global shortcut recording cleanup.
+    func setEmbeddedSettingsVisible(_ visible: Bool) {
+        store.setSettingsVisible(visible)
+        previewResourceLifecycle.setPreviewOwner(.settings, visible: visible)
+        if !visible {
+            globalShortcutController?.endRecording()
+        }
     }
 
     func stop() {

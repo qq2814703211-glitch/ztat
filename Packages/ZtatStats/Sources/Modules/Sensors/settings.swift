@@ -57,21 +57,25 @@ internal class Settings: NSStackView, Settings_v {
             ))
         ]))
         
-        self.addArrangedSubview(PreferencesSection([
+        var fanRows: [PreferencesRow] = [
             PreferencesRow(localizedString("Fan value"), component: self.selectView(
                 action: #selector(self.toggleFanValue),
                 items: FanValues,
                 selected: self.fanValueState.rawValue
-            )),
-            PreferencesRow(localizedString("Save the fan speed"), component: self.switchView(
+            ))
+        ]
+        // ZTAT-PATCH: Only expose fan write controls when a privileged fan writer is supported.
+        if SMCHelper.shared.isSupported {
+            fanRows.append(PreferencesRow(localizedString("Save the fan speed"), component: self.switchView(
                 action: #selector(self.toggleSpeedState),
                 state: self.fanSpeedState
-            )),
-            PreferencesRow(localizedString("Synchronize fan's control"), component: self.switchView(
+            )))
+            fanRows.append(PreferencesRow(localizedString("Synchronize fan's control"), component: self.switchView(
                 action: #selector(self.toggleFansSync),
                 state: self.fansSyncState
-            ))
-        ]))
+            )))
+        }
+        self.addArrangedSubview(PreferencesSection(fanRows))
         
         var sensorsRows: [PreferencesRow] = [
             PreferencesRow(localizedString("Show unknown sensors"), component: self.switchView(

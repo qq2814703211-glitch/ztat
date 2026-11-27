@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ZtatCore
 import AVFoundation
 import Carbon.HIToolbox
 import ImageIO
@@ -18,7 +19,7 @@ final class RecentCaptureService: ObservableObject {
 
     private let manager = FileManager.default
     private let hotkey = QuickToolHotkey(id: 21)
-    private let queue = DispatchQueue(label: "com.vorssaint.utils.recent-captures",
+    private let queue = DispatchQueue(label: "dev.ztat.toolbox.utils.recent-captures",
                                       qos: .utility)
     private let generationLock = NSLock()
     private let thumbnailCache = NSCache<NSString, NSImage>()
@@ -359,7 +360,7 @@ final class RecentCaptureService: ObservableObject {
                 NSSound.beep()
                 return
             }
-            appDelegate()?.closePopover()
+            ZtatHostBridge.shared.dismissHubPanel()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                 NSWorkspace.shared.open(url)
             }
@@ -376,7 +377,7 @@ final class RecentCaptureService: ObservableObject {
                 return
             }
             DispatchQueue.main.async {
-                appDelegate()?.closePopover()
+                ZtatHostBridge.shared.dismissHubPanel()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                     ScreenshotService.shared.restorePreview(capture)
                 }

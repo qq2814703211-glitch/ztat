@@ -2,6 +2,7 @@ import AppKit
 import AudioToolbox
 import Combine
 import Foundation
+import ZtatCore
 
 private struct BluetoothDemandSettingsSnapshot: Equatable {
     var enabledPopupSections: Set<PopupSection> = []
@@ -1819,6 +1820,8 @@ final class SystemStatusStore: ObservableObject {
         // A battery update alone must not reuse cached readiness after a failed
         // verification. A later positive readiness event can still finish this cycle.
         guard autoLowPowerVerificationTask == nil, autoLowPowerHelperVerified else { return }
+        // ZTAT-PATCH: Background Auto-LPM must only run silently when passwordless pmset rule is ready.
+        guard ZtatPowerGuardRegistry.shared.snapshot.isPasswordlessSudoReady else { return }
         if lowPowerAutoEnable.evaluate(battery: battery, threshold: threshold, isEnabled: true) {
             lowPowerMode.setLowPowerMode(true)
         }

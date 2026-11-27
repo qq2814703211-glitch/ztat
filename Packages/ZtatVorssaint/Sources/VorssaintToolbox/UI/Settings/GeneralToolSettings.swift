@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ZtatCore
 import SwiftUI
 
 /// Tools that share General's destination have their own detail content, so
@@ -29,7 +30,7 @@ struct GeneralToolSettings: View {
                         SettingsRow(symbol: nil, title: text.iconMissingTitle,
                                     caption: text.iconMissingCaption) {
                             Button(l10n.s.showMenuBarIcon) {
-                                appDelegate()?.reshowStatusItem()
+                                ZtatHostBridge.shared.showHubPanel(tab: nil)
                             }
                         }
                     }

@@ -22,36 +22,37 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
     @Published public private(set) var telemetry = PowerGuardTelemetry()
     @Published public private(set) var logs: [PowerGuardLogEntry] = []
     @Published public private(set) var toastMessage: String? = nil
+    @Published public private(set) var needsManualSleepRecovery: Bool = false
 
     // MARK: - Persisted Preferences
     @Published public var selectedDuration: PowerGuardDuration {
-        didSet { UserDefaults.standard.set(selectedDuration.rawValue, forKey: PowerGuardDefaultsKey.selectedDuration) }
+        didSet { PowerGuardDefaults.store.set(selectedDuration.rawValue, forKey: PowerGuardDefaultsKey.selectedDuration) }
     }
     @Published public var keepFramebufferAwake: Bool {
         didSet {
-            UserDefaults.standard.set(keepFramebufferAwake, forKey: PowerGuardDefaultsKey.keepFramebufferAwake)
+            PowerGuardDefaults.store.set(keepFramebufferAwake, forKey: PowerGuardDefaultsKey.keepFramebufferAwake)
             reconcileFramebufferTimer()
         }
     }
     @Published public var allowDisplaySleep: Bool {
         didSet {
-            UserDefaults.standard.set(allowDisplaySleep, forKey: PowerGuardDefaultsKey.allowDisplaySleep)
+            PowerGuardDefaults.store.set(allowDisplaySleep, forKey: PowerGuardDefaultsKey.allowDisplaySleep)
             if isIdleKeepAwakeActive {
                 refreshIdleAssertions()
             }
         }
     }
     @Published public var autoDimOnLidClose: Bool {
-        didSet { UserDefaults.standard.set(autoDimOnLidClose, forKey: PowerGuardDefaultsKey.autoDimOnLidClose) }
+        didSet { PowerGuardDefaults.store.set(autoDimOnLidClose, forKey: PowerGuardDefaultsKey.autoDimOnLidClose) }
     }
     @Published public var lowBatteryAutoRestore: Bool {
-        didSet { UserDefaults.standard.set(lowBatteryAutoRestore, forKey: PowerGuardDefaultsKey.lowBatteryAutoRestore) }
+        didSet { PowerGuardDefaults.store.set(lowBatteryAutoRestore, forKey: PowerGuardDefaultsKey.lowBatteryAutoRestore) }
     }
     @Published public var lowBatteryThreshold: Int {
-        didSet { UserDefaults.standard.set(lowBatteryThreshold, forKey: PowerGuardDefaultsKey.lowBatteryThreshold) }
+        didSet { PowerGuardDefaults.store.set(lowBatteryThreshold, forKey: PowerGuardDefaultsKey.lowBatteryThreshold) }
     }
     @Published public var restoreSleepOnQuit: Bool {
-        didSet { UserDefaults.standard.set(restoreSleepOnQuit, forKey: PowerGuardDefaultsKey.restoreSleepOnQuit) }
+        didSet { PowerGuardDefaults.store.set(restoreSleepOnQuit, forKey: PowerGuardDefaultsKey.restoreSleepOnQuit) }
     }
 
     public var isAnyGuardActive: Bool {
@@ -68,14 +69,15 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
     private var localKeyMonitor: Any?
     private var blackoutHotKeyRef: EventHotKeyRef?
     private var workspaceObservers: [NSObjectProtocol] = []
+    private var defaultCenterObservers: [NSObjectProtocol] = []
     private var isPanelVisible = false
     private var started = false
     private var didAutoDimForLid = false
 
-    private static var hotKeyHandlerInstalled = false
+    private static var hotKeyHandlerRef: EventHandlerRef?
 
     private init() {
-        let d = UserDefaults.standard
+        let d = PowerGuardDefaults.store
         let savedDur = d.object(forKey: PowerGuardDefaultsKey.selectedDuration) as? TimeInterval ?? PowerGuardDuration.infinite.rawValue
         self.selectedDuration = PowerGuardDuration(rawValue: savedDur) ?? .infinite
         self.keepFramebufferAwake = d.object(forKey: PowerGuardDefaultsKey.keepFramebufferAwake) as? Bool ?? true
@@ -84,6 +86,7 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
         self.lowBatteryAutoRestore = d.object(forKey: PowerGuardDefaultsKey.lowBatteryAutoRestore) as? Bool ?? true
         self.lowBatteryThreshold = d.object(forKey: PowerGuardDefaultsKey.lowBatteryThreshold) as? Int ?? 20
         self.restoreSleepOnQuit = d.object(forKey: PowerGuardDefaultsKey.restoreSleepOnQuit) as? Bool ?? true
+        self.telemetry.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
     }
 
     // MARK: - Lifecycle
@@ -106,11 +109,18 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
 
         Task { [weak self] in
             let ready = await ClamshellSudoEngine.shared.refreshPasswordlessSudoStatus()
+            let pm = await ClamshellSudoEngine.shared.readPowerModeState()
             await MainActor.run { [weak self] in
-                self?.telemetry.isPasswordlessSudoReady = ready
+                guard let self else { return }
+                self.telemetry.isPasswordlessSudoReady = ready
+                self.telemetry.isClamshellSudoLegacyOnly = ClamshellSudoEngine.shared.isClamshellSudoLegacyOnlyCached()
+                self.telemetry.isLowPowerMode = pm.lowPower
+                self.telemetry.isHighPowerMode = pm.highPower
+                self.telemetry.supportsHighPowerMode = pm.supportsHighPower
+                self.publishSnapshot()
             }
         }
-        appendLog(ZtatL10n.tr("ZtatPowerGuard 引擎已启动（事件驱动零轮询）", "ZtatPowerGuard engine started (event-driven)"))
+        appendLog(ZtatL10n.tr("电源守护引擎已启动（事件驱动零轮询）", "PowerGuard engine started (event-driven)"))
     }
 
     public func stopForTermination() {
@@ -119,20 +129,25 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
             NSWorkspace.shared.notificationCenter.removeObserver(obs)
         }
         workspaceObservers.removeAll()
+        for obs in defaultCenterObservers {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        defaultCenterObservers.removeAll()
         expirationTimer?.invalidate()
         framebufferGuardTimer?.invalidate()
         visibleTelemetryTimer?.invalidate()
         removeBlackoutRecoveryHooks()
 
-        if isBlackoutActive {
+        if isBlackoutActive || didAutoDimForLid {
             DisplayBlackoutEngine.shared.disableBlackout(retryOnFailure: false)
             isBlackoutActive = false
+            didAutoDimForLid = false
         }
         releaseIdleAssertions()
         DisplayBlackoutEngine.shared.releaseFramebufferWakeAssertion()
 
-        if restoreSleepOnQuit && (isClamshellLocked || UserDefaults.standard.bool(forKey: PowerGuardDefaultsKey.sleepDisabledOwned)) {
-            if ClamshellSudoEngine.shared.probePasswordlessSudoSync() {
+        if restoreSleepOnQuit && (isClamshellLocked || PowerGuardDefaults.store.bool(forKey: PowerGuardDefaultsKey.sleepDisabledOwned)) {
+            if ClamshellSudoEngine.shared.probeClamshellSudoSync() {
                 _ = ClamshellSudoEngine.shared.setSleepDisabledSync(false)
             }
         }
@@ -148,8 +163,15 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
             refreshTelemetry()
             Task { [weak self] in
                 let ready = await ClamshellSudoEngine.shared.refreshPasswordlessSudoStatus()
+                let pm = await ClamshellSudoEngine.shared.readPowerModeState()
                 await MainActor.run { [weak self] in
-                    self?.telemetry.isPasswordlessSudoReady = ready
+                    guard let self else { return }
+                    self.telemetry.isPasswordlessSudoReady = ready
+                    self.telemetry.isClamshellSudoLegacyOnly = ClamshellSudoEngine.shared.isClamshellSudoLegacyOnlyCached()
+                    self.telemetry.isLowPowerMode = pm.lowPower
+                    self.telemetry.isHighPowerMode = pm.highPower
+                    self.telemetry.supportsHighPowerMode = pm.supportsHighPower
+                    self.publishSnapshot()
                 }
             }
             let t = Timer(timeInterval: 2.0, repeats: true) { [weak self] _ in
@@ -187,11 +209,109 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
             isLidClosed: telemetry.lidClosed,
             isDisplayAsleep: telemetry.displayAsleep,
             isOnACPower: telemetry.isOnACPower,
+            isCharging: telemetry.isCharging,
             batteryPercentage: telemetry.batteryPercentage,
             remainingSeconds: remaining,
             expirationDate: expirationDate,
-            summaryLabel: label
+            summaryLabel: label,
+            isLowPowerMode: telemetry.isLowPowerMode,
+            isHighPowerMode: telemetry.isHighPowerMode,
+            supportsHighPowerMode: telemetry.supportsHighPowerMode,
+            isPasswordlessSudoReady: telemetry.isPasswordlessSudoReady
         )
+    }
+
+    public func refreshPowerModes() async {
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.isLowPowerMode = pm.lowPower
+        telemetry.isHighPowerMode = pm.highPower
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        publishSnapshot()
+    }
+
+    public func readLowPowerMode() async -> Bool {
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.isLowPowerMode = pm.lowPower
+        telemetry.isHighPowerMode = pm.highPower
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        publishSnapshot()
+        return pm.lowPower
+    }
+
+    public func readHighPowerModeSupport() async -> Bool {
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        telemetry.isHighPowerMode = pm.highPower
+        publishSnapshot()
+        return pm.supportsHighPower
+    }
+
+    public func readHighPowerMode() async -> Bool {
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.isHighPowerMode = pm.highPower
+        telemetry.isLowPowerMode = pm.lowPower
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        publishSnapshot()
+        return pm.highPower
+    }
+
+    public func setLowPowerMode(
+        _ enabled: Bool,
+        allowInteractivePrompt: Bool = true
+    ) async -> (success: Bool, observed: Bool, error: String?) {
+        let res = await ClamshellSudoEngine.shared.setLowPowerMode(enabled, allowInteractivePrompt: allowInteractivePrompt)
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.isLowPowerMode = pm.lowPower
+        telemetry.isHighPowerMode = pm.highPower
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        if res.success {
+            appendLog(
+                pm.lowPower
+                    ? ZtatL10n.tr("已开启低电量模式", "Low Power Mode enabled")
+                    : ZtatL10n.tr("已关闭低电量模式", "Low Power Mode disabled")
+            )
+        } else if let err = res.error {
+            appendLog(ZtatL10n.tr("切换低电量模式失败：\(err)", "Failed to switch Low Power Mode: \(err)"), isWarning: true)
+        }
+        publishSnapshot()
+        return (res.success, pm.lowPower, res.error)
+    }
+
+    public func setHighPowerMode(
+        _ enabled: Bool,
+        allowInteractivePrompt: Bool = true
+    ) async -> (success: Bool, observed: Bool, error: String?) {
+        let res = await ClamshellSudoEngine.shared.setHighPowerMode(enabled, allowInteractivePrompt: allowInteractivePrompt)
+        let pm = await ClamshellSudoEngine.shared.readPowerModeState()
+        telemetry.isLowPowerMode = pm.lowPower
+        telemetry.isHighPowerMode = pm.highPower
+        telemetry.supportsHighPowerMode = pm.supportsHighPower
+        if res.success {
+            appendLog(
+                pm.highPower
+                    ? ZtatL10n.tr("已开启高能耗模式", "High Power Mode enabled")
+                    : ZtatL10n.tr("已关闭高能耗模式", "High Power Mode disabled")
+            )
+        } else if let err = res.error {
+            appendLog(ZtatL10n.tr("切换高能耗模式失败：\(err)", "Failed to switch High Power Mode: \(err)"), isWarning: true)
+        }
+        publishSnapshot()
+        return (res.success, pm.highPower, res.error)
+    }
+
+    public func installPasswordlessSudoers() async -> (success: Bool, error: String?) {
+        let res = await ClamshellSudoEngine.shared.installPasswordlessSudoers()
+        let ready = await ClamshellSudoEngine.shared.refreshPasswordlessSudoStatus()
+        telemetry.isPasswordlessSudoReady = ready
+        telemetry.isClamshellSudoLegacyOnly = ClamshellSudoEngine.shared.isClamshellSudoLegacyOnlyCached()
+        if res.success {
+            appendLog(ZtatL10n.tr("已安装统一免密 pmset 规则（合盖锁 + 低/高能耗模式）", "Installed unified passwordless pmset rule (clamshell + power modes)"))
+            showToast(ZtatL10n.tr("免密规则已就绪", "Passwordless power rule ready"))
+        } else if let err = res.error {
+            appendLog(ZtatL10n.tr("免密规则安装失败：\(err)", "Failed to install sudoers rule: \(err)"), isWarning: true)
+        }
+        publishSnapshot()
+        return res
     }
 
     public func toggleRemoteReadyMode() {
@@ -236,9 +356,10 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
         expirationTimer = nil
         expirationDate = nil
 
-        if isBlackoutActive {
+        if isBlackoutActive || didAutoDimForLid {
             _ = DisplayBlackoutEngine.shared.disableBlackout(retryOnFailure: true)
             isBlackoutActive = false
+            didAutoDimForLid = false
             removeBlackoutRecoveryHooks()
         }
         releaseIdleAssertions()
@@ -283,6 +404,8 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
                 self.isBusy = false
                 if res.success {
                     self.isClamshellLocked = enabled
+                    self.needsManualSleepRecovery = false
+                    self.reconcileFramebufferTimer()
                     self.appendLog(
                         enabled
                             ? ZtatL10n.tr("已锁定合盖不休眠 (pmset disablesleep 1)", "Clamshell lock enabled (pmset disablesleep 1)")
@@ -319,7 +442,7 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
             return
         }
 
-        if !UserDefaults.standard.bool(forKey: PowerGuardDefaultsKey.hasShownBlackoutGuide) {
+        if !PowerGuardDefaults.store.bool(forKey: PowerGuardDefaultsKey.hasShownBlackoutGuide) {
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = ZtatL10n.tr("即将开启物理熄屏挂机 (背光 0%)", "Enable Physical Blackout (0% Backlight)?")
@@ -331,7 +454,7 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
             alert.addButton(withTitle: ZtatL10n.tr("取消", "Cancel"))
             NSApp.activate(ignoringOtherApps: true)
             guard alert.runModal() == .alertFirstButtonReturn else { return }
-            UserDefaults.standard.set(true, forKey: PowerGuardDefaultsKey.hasShownBlackoutGuide)
+            PowerGuardDefaults.store.set(true, forKey: PowerGuardDefaultsKey.hasShownBlackoutGuide)
         }
 
         // Automatically ensure idle keep-awake is active during blackout
@@ -514,9 +637,16 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
 
     public func refreshTelemetry() {
         let sudoReady = ClamshellSudoEngine.shared.isPasswordlessSudoReadyCached()
-        let next = HardwarePowerProbe.shared.snapshot(passwordlessSudoReady: sudoReady)
+        var next = HardwarePowerProbe.shared.snapshot(passwordlessSudoReady: sudoReady)
+        next.isClamshellSudoLegacyOnly = ClamshellSudoEngine.shared.isClamshellSudoLegacyOnlyCached()
+        next.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        next.isHighPowerMode = telemetry.isHighPowerMode
+        next.supportsHighPowerMode = telemetry.supportsHighPowerMode
         telemetry = next
         isClamshellLocked = next.sleepDisabledKernel
+        if !next.sleepDisabledKernel {
+            needsManualSleepRecovery = false
+        }
 
         if isBlackoutActive && DisplayBlackoutEngine.shared.reconcileExternalBrightnessChange() {
             isBlackoutActive = false
@@ -530,11 +660,11 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
         if DisplayBlackoutEngine.shared.recoverFromCrashIfNeeded() {
             appendLog(ZtatL10n.tr("检测到上次异常退出处于熄屏状态，已自动恢复屏幕亮度", "Recovered built-in brightness after unclean exit"), isWarning: true)
         }
-        if UserDefaults.standard.bool(forKey: PowerGuardDefaultsKey.sleepDisabledOwned) {
+        if PowerGuardDefaults.store.bool(forKey: PowerGuardDefaultsKey.sleepDisabledOwned) {
             let root = HardwarePowerProbe.shared.readRootDomainState()
             if root.sleepDisabled {
                 Task { [weak self] in
-                    if ClamshellSudoEngine.shared.probePasswordlessSudoSync() {
+                    if ClamshellSudoEngine.shared.probeClamshellSudoSync() {
                         let res = await ClamshellSudoEngine.shared.setSleepDisabled(false)
                         if res.success {
                             await MainActor.run { [weak self] in
@@ -542,10 +672,18 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
                                 self?.refreshTelemetry()
                             }
                         }
+                    } else {
+                        await MainActor.run { [weak self] in
+                            self?.needsManualSleepRecovery = true
+                            self?.appendLog(
+                                ZtatL10n.tr("上次退出时仍处于合盖不休眠状态，点击“恢复系统默认休眠”可立即解除", "Previous session exited with clamshell sleep disabled; click Restore Default Sleep to clear"),
+                                isWarning: true
+                            )
+                        }
                     }
                 }
             } else {
-                UserDefaults.standard.removeObject(forKey: PowerGuardDefaultsKey.sleepDisabledOwned)
+                PowerGuardDefaults.store.removeObject(forKey: PowerGuardDefaultsKey.sleepDisabledOwned)
             }
         }
     }
@@ -577,6 +715,17 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
                 }
             }
         )
+        defaultCenterObservers.append(
+            NotificationCenter.default.addObserver(
+                forName: NSNotification.Name.NSProcessInfoPowerStateDidChange,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    await self?.refreshPowerModes()
+                }
+            }
+        )
     }
 
     // MARK: - Unfocused Blackout Recovery (Local Esc + Carbon ⌘⌥B Hotkey, zero Accessibility permission needed)
@@ -597,13 +746,14 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
         }
 
         if blackoutHotKeyRef == nil {
-            if !Self.hotKeyHandlerInstalled {
+            if Self.hotKeyHandlerRef == nil {
                 var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-                InstallEventHandler(
+                var handlerRef: EventHandlerRef?
+                let installStatus = InstallEventHandler(
                     GetApplicationEventTarget(),
                     { _, event, _ -> OSStatus in
                         var hkID = EventHotKeyID()
-                        GetEventParameter(
+                        let err = GetEventParameter(
                             event,
                             EventParamName(kEventParamDirectObject),
                             EventParamType(typeEventHotKeyID),
@@ -612,11 +762,12 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
                             nil,
                             &hkID
                         )
-                        if hkID.signature == 0x5A545047 && hkID.id == 1 { // 'ZTPG'
-                            Task { @MainActor in
-                                if PowerGuardCoordinator.shared.isBlackoutActive {
-                                    PowerGuardCoordinator.shared.toggleBlackoutMode()
-                                }
+                        guard err == noErr, hkID.signature == 0x5A545047, hkID.id == 1 else { // 'ZTPG'
+                            return OSStatus(eventNotHandledErr)
+                        }
+                        Task { @MainActor in
+                            if PowerGuardCoordinator.shared.isBlackoutActive {
+                                PowerGuardCoordinator.shared.toggleBlackoutMode()
                             }
                         }
                         return noErr
@@ -624,9 +775,11 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
                     1,
                     &eventType,
                     nil,
-                    nil
+                    &handlerRef
                 )
-                Self.hotKeyHandlerInstalled = true
+                if installStatus == noErr {
+                    Self.hotKeyHandlerRef = handlerRef
+                }
             }
             var ref: EventHotKeyRef?
             let hkID = EventHotKeyID(signature: 0x5A545047, id: 1)
@@ -645,6 +798,10 @@ public final class PowerGuardCoordinator: ObservableObject, ZtatPowerGuardContro
         if let ref = blackoutHotKeyRef {
             UnregisterEventHotKey(ref)
             blackoutHotKeyRef = nil
+        }
+        if let handler = Self.hotKeyHandlerRef {
+            RemoveEventHandler(handler)
+            Self.hotKeyHandlerRef = nil
         }
     }
 

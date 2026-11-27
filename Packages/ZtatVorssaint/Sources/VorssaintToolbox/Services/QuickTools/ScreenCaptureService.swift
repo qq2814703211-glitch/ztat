@@ -136,7 +136,7 @@ final class ScreenCaptureService: ObservableObject {
         // selection that runs over a recording offers only its own tool.
         let tools = duringRecording ? [selected] : available
 
-        guard Permissions.shared.screenRecording else {
+        guard Permissions.shared.checkScreenRecordingLive() else {
             // Color sampling itself needs no capture permission, so its
             // direct action keeps the native path when capture access is off.
             if selected == .color {

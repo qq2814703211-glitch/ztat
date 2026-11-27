@@ -494,9 +494,9 @@ enum FeatureVisibilitySupport {
 
     static func isPageVisible(_ page: SettingsPage,
                               isAvailable: (AppFeature) -> Bool) -> Bool {
-        // ZTAT-PATCH: Hide overlapping Vorssaint monitor/update/about/support pages inside ztat Settings.
+        // ZTAT-PATCH: Hide overlapping Vorssaint monitor/notch/update/about/support pages inside ztat Settings.
         switch page {
-        case .monitor, .about, .releaseNotes, .support:
+        case .monitor, .notch, .notchMascot, .about, .releaseNotes, .support:
             return false
         default:
             break

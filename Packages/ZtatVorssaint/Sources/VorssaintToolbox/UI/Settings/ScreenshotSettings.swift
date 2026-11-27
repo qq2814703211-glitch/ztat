@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import SwiftUI
+import ZtatCore
 
 /// Screenshot-specific sections inside the shared screen-capture page.
 struct ScreenshotCaptureSettings: View {
@@ -45,7 +46,7 @@ struct ScreenshotCaptureSettings: View {
     @AppStorage(AppFeature.shelf.availabilityKey) private var shelfAvailable = false
     @AppStorage(DefaultsKey.screenshotPreviewPosition) private var previewPositionRaw = ""
     @AppStorage(DefaultsKey.screenshotPreviewTakesFocus) private var previewTakesFocus = true
-    @AppStorage(DefaultsKey.screenshotPreviewEnabled) private var previewEnabled = true
+    @AppStorage(DefaultsKey.screenshotPreviewEnabled) private var previewEnabled = false
     @AppStorage(DefaultsKey.screenshotPreviewDuration) private var previewDuration =
         ScreenshotSupport.defaultConfirmationPreviewDuration
     @AppStorage(DefaultsKey.screenshotSharingEnabled) private var sharingEnabled = true
@@ -177,15 +178,13 @@ struct ScreenshotCaptureSettings: View {
                     Text(strings.loupeZoomOptionCaption)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    previewPositionRow
-                    previewFocusRow
-                    defaultActionRow
                 } label: {
                     Text(FeatureStrings.recorder(l10n.language).moreOptions)
                 }
             }
 
             Section {
+                defaultActionRow
                 Toggle(strings.autoCopyToggle, isOn: autoCopyBinding)
                 Text(strings.autoCopyCaption)
                     .font(.caption)
@@ -307,38 +306,34 @@ struct ScreenshotCaptureSettings: View {
     }
 
     private var defaultActionRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ScreenshotDefaultActionPicker(strings: strings, selection: $defaultActionRaw)
-            if defaultActionRaw != ScreenshotDefaultAction.edit.rawValue {
-                Text(strings.defaultActionCaption)
+        Group {
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle(ZtatL10n.tr("截图后弹出预览与编辑框", "Show Preview / Editor Overlay after Screenshot"), isOn: $previewEnabled)
+                Text(ZtatL10n.tr("默认关闭。开启时，截图后将弹出浮动展示与标注编辑框；关闭时直接复制到剪贴板或按默认操作静默保存，不弹窗打扰。", "Defaults to Off. When enabled, a floating preview & annotation overlay pops up after capture. When disabled, screenshots copy directly to clipboard or save silently."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            if usesAutomaticConfirmationPreview {
-                Toggle(strings.confirmationPreviewToggle, isOn: $previewEnabled)
-                if previewEnabled {
-                    Picker(strings.confirmationPreviewDurationLabel, selection: $previewDuration) {
-                        ForEach(ScreenshotSupport.confirmationPreviewDurations, id: \.self) { seconds in
-                            if seconds == 0 {
-                                Text(strings.confirmationPreviewUntilDismissed).tag(0)
-                            } else {
-                                Text(String(format: strings.delaySecondsFormat, seconds)).tag(seconds)
-                            }
+            if previewEnabled {
+                Picker(strings.confirmationPreviewDurationLabel, selection: $previewDuration) {
+                    ForEach(ScreenshotSupport.confirmationPreviewDurations, id: \.self) { seconds in
+                        if seconds == 0 {
+                            Text(strings.confirmationPreviewUntilDismissed).tag(0)
+                        } else {
+                            Text(String(format: strings.delaySecondsFormat, seconds)).tag(seconds)
                         }
                     }
                 }
-                Text(strings.confirmationPreviewCaption)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                previewPositionRow
+                previewFocusRow
             }
-        }
-    }
-
-    private var usesAutomaticConfirmationPreview: Bool {
-        guard let action = ScreenshotDefaultAction(rawValue: defaultActionRaw) else { return false }
-        switch action {
-        case .save, .saveAndCopy, .copy: return true
-        case .none, .edit: return false
+            VStack(alignment: .leading, spacing: 4) {
+                ScreenshotDefaultActionPicker(strings: strings, selection: $defaultActionRaw)
+                if defaultActionRaw != ScreenshotDefaultAction.edit.rawValue {
+                    Text(strings.defaultActionCaption)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 

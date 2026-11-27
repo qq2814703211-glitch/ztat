@@ -47,7 +47,7 @@ private final class RecorderSession: NSObject, RecorderCaptureEngineDelegate {
     private let streamHeardSinceTap = RecorderAudioFlag()
     private let pointer: RecorderPointerSampler
     private let typing: RecorderTypingSampler
-    private let writerQueue = DispatchQueue(label: "com.vorssaint.recorder.writer",
+    private let writerQueue = DispatchQueue(label: "dev.ztat.toolbox.recorder.writer",
                                             qos: .userInitiated)
     private let startGate = RecorderStartGate()
     /// Immutable for the whole session, which is what makes it safe to touch
@@ -387,11 +387,11 @@ final class ScreenRecorderService: ObservableObject {
         guard AppFeature.screenRecorder.isAvailable, !isFinishing,
               session == nil, countdown == nil, !isAwaitingMicrophone,
               !isPreparingRecording else { return false }
-        guard Permissions.shared.screenRecording else {
+        guard Permissions.shared.checkScreenRecordingLive() else {
             Permissions.shared.requestScreenRecording()
             return false
         }
-        guard Permissions.shared.accessibility else {
+        guard Permissions.shared.checkAccessibilityLive() else {
             Permissions.shared.requestAccessibility()
             return false
         }

@@ -3,7 +3,7 @@ import Foundation
 import OSLog
 
 private let mobileDiscoveryLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio", category: "apple-device-discovery"
+    subsystem: "dev.ztat.app", category: "apple-device-discovery"
 )
 
 protocol MobileBatteryHelperExecuting: Sendable {

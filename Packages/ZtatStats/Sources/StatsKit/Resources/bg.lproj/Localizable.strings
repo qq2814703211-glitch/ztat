@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Деинсталирай помощника за вентилатора"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "Одобрете в Системни настройки ▸ Обекти за вход"; // gemma4:31b
 "Fan helper needs your approval" = "Помощникът за вентилатора се нуждае от вашето одобрение"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "За да контролирате вентилаторите, активирайте Stats в Системни настройки ▸ Обекти за вход."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "За да контролирате вентилаторите, активирайте ztat в Системни настройки ▸ Обекти за вход."; // gemma4:31b
 "Open Login Items" = "Отвори обекти при вход"; // gemma4:31b
 "Could not enable the fan helper" = "Не успя да се активира помощникът за вентилатора"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Отворете Системни настройки ▸ Обекти за вход, уверете се, че Stats е разрешен във фонов режим, след това опитайте отново."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Отворете Системни настройки ▸ Обекти за вход, уверете се, че ztat е разрешен във фонов режим, след това опитайте отново."; // gemma4:31b
 "Fan value" = "Стойност на вентилатора"; // gemma4:31b
 "Turn off fan" = "Изключи вентилатора"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Вие ще изключите вентилатора. Това не е препоръчително действие, което може да повреди вашия Mac, сигурни ли сте, че искате да направите това?"; // gemma4:31b

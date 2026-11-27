@@ -387,7 +387,7 @@ public class LineChartView: ChartView {
         self.fixedScale = fixedScale
         self.zeroValue = zeroValue
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Line")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Line")
         self.animationEnabled = animation
         
         self.dateFormatter.dateFormat = "dd/MM HH:mm:ss"
@@ -889,7 +889,7 @@ public class NetworkChartView: ChartView {
         self.inChart = LineChartView(frame: inFrame, num: num, color: inColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation, history: history?.input)
         self.outChart = LineChartView(frame: outFrame, num: num, color: outColor, scale: scale, fixedScale: fixedScale, zeroValue: 256.0, animation: animation, history: history?.output)
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Network")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Network")
         
         self.inChart.setMinMax(minMax)
         self.outChart.setMinMax(minMax)
@@ -1022,7 +1022,7 @@ public class PieChartView: ChartView {
         self.lineCap = lineCap
         self.lineWidth = lineWidth
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Pie")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Pie")
         self.animationEnabled = animation
         
         self.setAccessibilityElement(true)
@@ -1160,7 +1160,7 @@ public class TachometerGraphView: ChartView {
         self.filled = filled
         self.segments = segments
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Tachometer")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Tachometer")
         self.animationEnabled = animation
     }
     
@@ -1225,7 +1225,7 @@ public class GaugeChartView: ChartView {
         self.segments = segments
         self.title = title
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Gauge")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Gauge")
         self.animationEnabled = animation
         
         self.setAccessibilityElement(true)
@@ -1360,7 +1360,7 @@ public class ColumnChartView: ChartView {
     private var cursor: CGPoint? = nil
     
     public init(frame: NSRect = NSRect.zero, num: Int, animation: Bool = true) {
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Column")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Column")
         self.animationEnabled = animation
         self.values = Array(repeating: ColorValue(0, color: .controlAccentColor), count: num)
         
@@ -1525,7 +1525,7 @@ public class BatteryChartView: ChartView {
     
     public init(frame: NSRect = .zero, history: BatteryChartData = BatteryChartData()) {
         self.history = history
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Battery")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Battery")
         self.dateFormatter.dateFormat = "HH:mm:ss"
     }
     
@@ -1658,7 +1658,7 @@ public class GridChartView: ChartView {
     public init(frame: NSRect = .zero, grid: (rows: Int, columns: Int), history: GridChartData? = nil) {
         self.history = history ?? GridChartData(capacity: grid.rows * grid.columns)
         self.grid = grid
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Grid")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Grid")
         
         self.dateFormatter.dateFormat = "HH:mm:ss"
         
@@ -1760,7 +1760,7 @@ public class BarChartView: ChartView {
         self.size = size
         self.horizontal = horizontal
         
-        super.init(frame: frame, queueLabel: "eu.exelban.Stats.Charts.Bar")
+        super.init(frame: frame, queueLabel: "dev.ztat.stats.Charts.Bar")
         self.animationEnabled = animation
     }
     

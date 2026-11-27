@@ -66,7 +66,7 @@ final class WindowPreviewProvider {
                          maxPixelSize: CGFloat = defaultMaxPixelSize,
                          excludedAppsKey: String,
                          onUpdate: @escaping (CGWindowID, CGImage) -> Void) -> Task<Void, Never>? {
-        guard Permissions.shared.screenRecording, Self.screenIsInView(),
+        guard Permissions.shared.checkScreenRecordingLive(), Self.screenIsInView(),
               !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else {
             return nil
         }
@@ -440,7 +440,7 @@ final class WindowPreviewProvider {
     /// The activated app's windows are listed here, off the main thread. A
     /// slow app can hold that Accessibility walk for seconds, which must not
     /// tie up a thread Swift's tasks share.
-    private static let warmEnumerationQueue = DispatchQueue(label: "com.vorssaint.preview.warm-enumeration",
+    private static let warmEnumerationQueue = DispatchQueue(label: "dev.ztat.toolbox.preview.warm-enumeration",
                                                             qos: .utility)
 
     /// Waits for the stage/space transition to settle, then captures the
@@ -448,7 +448,7 @@ final class WindowPreviewProvider {
     private func scheduleWarm(pid: pid_t) {
         // Only the switcher warms, so its own paused apps apply.
         let excludedAppsKey = DefaultsKey.switcherPreviewExcludedApps
-        guard Permissions.shared.screenRecording, Self.screenIsInView(),
+        guard Permissions.shared.checkScreenRecordingLive(), Self.screenIsInView(),
               !Self.captureIsPaused(excludedAppsKey: excludedAppsKey) else { return }
         pendingWarmPid = pid
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in

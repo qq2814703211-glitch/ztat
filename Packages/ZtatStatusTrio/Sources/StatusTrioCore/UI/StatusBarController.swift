@@ -1235,6 +1235,22 @@ final class StatusBarController: NSObject {
         }
     }
 
+    // ZTAT-PATCH: Track active Hub tab so scroll-to-volume and alongside detail windows never bleed into other tabs.
+    private var activeHubTab: ZtatHubTab = .status
+
+    func setActiveHubTab(_ tab: ZtatHubTab) {
+        guard activeHubTab != tab else { return }
+        activeHubTab = tab
+        if tab != .status, panelViewModel.isShowingDetailPage {
+            panelViewModel.showSummaryPage()
+        }
+    }
+
+    func statusItemScreenFrame() -> NSRect? {
+        guard let button = statusItem.button, let window = button.window else { return nil }
+        return window.convertToScreen(button.convert(button.bounds, to: nil))
+    }
+
     // ZTAT-PATCH: Explicit show/dismiss entry points for ZtatStatusTrioHost.
     func showPopover() {
         if popover.isShown {
@@ -1863,8 +1879,9 @@ final class StatusBarController: NSObject {
         if isPointerOverScrollableScrollView(event) { return false }
 
         // 3. Opt-in summary-page fallback to the output volume. Sliders were
-        //    handled above; detail pages never change volume (issue #324).
-        guard PanelScrollVolumeFallback.allows(
+        //    handled above; detail pages and non-Status Hub tabs never change volume (issue #324).
+        guard activeHubTab == .status,
+              PanelScrollVolumeFallback.allows(
             panelScrollEnabled: settings.popupPanelScrollAdjustsVolume,
             route: panelViewModel.route,
             isVolumeControlAvailable: store.isVolumeControlAvailable,

@@ -75,7 +75,7 @@ struct SettingsTransferView: View {
             isPresented: $isExporting,
             document: exportFile,
             contentType: .json,
-            defaultFilename: "Status-Trio-Settings.json"
+            defaultFilename: "ztat-Status-Settings.json"
         ) { result in
             switch result {
             case .success:

@@ -260,8 +260,8 @@ public class SpeedWidget: WidgetWrapper {
         if self.speedUnit != NetworkSpeedUnitAuto {
             rowWidth = max(rowWidth, value.size().width.rounded(.up) + (Constants.Widget.margin.x*2))
         }
-        let rect = CGRect(x: offset.x, y: (height-size)/2 + offset.y + 1, width: rowWidth - (Constants.Widget.margin.x*2), height: size)
-        value.draw(with: rect)
+        let rect = CGRect(x: offset.x, y: (height-size)/2 + offset.y + 1.0, width: rowWidth - (Constants.Widget.margin.x*2), height: size)
+        value.draw(in: rect)
         
         return rowWidth
     }
@@ -364,8 +364,8 @@ public class SpeedWidget: WidgetWrapper {
                 NSAttributedString.Key.paragraphStyle: style
             ]
             
-            let inputY: CGFloat = self.displayValueState == "io" ? rowHeight + 1 : 1
-            let outputY: CGFloat = self.displayValueState == "io" ? 1 : rowHeight + 1
+            let inputY: CGFloat = self.displayValueState == "io" ? rowHeight + 1.5 : 2.5
+            let outputY: CGFloat = self.displayValueState == "io" ? 2.5 : rowHeight + 1.5
             
             let input = NSAttributedString.init(
                 string: Units(bytes: self.inputValue).getReadableSpeed(base: self.base, unit: self.speedUnit, omitUnits: !self.unitsState),
@@ -380,10 +380,10 @@ public class SpeedWidget: WidgetWrapper {
             }
             
             var rect = CGRect(x: Constants.Widget.margin.x + x, y: inputY, width: rowWidth - (Constants.Widget.margin.x*2), height: rowHeight)
-            input.draw(with: rect)
+            input.draw(in: rect)
             
             rect = CGRect(x: Constants.Widget.margin.x + x, y: outputY, width: rowWidth - (Constants.Widget.margin.x*2), height: rowHeight)
-            output.draw(with: rect)
+            output.draw(in: rect)
             
             width += rowWidth
         }
@@ -402,12 +402,10 @@ public class SpeedWidget: WidgetWrapper {
     }
     
     private func drawDots(_ width: CGFloat) {
-        let rowHeight: CGFloat = self.frame.height / 2
         let size: CGFloat = 6
-        let y: CGFloat = (rowHeight-size)/2
         let x: CGFloat = self.iconAlignmentState == "left" ? Constants.Widget.margin.x : Constants.Widget.margin.x+(width-6)
-        let inputY: CGFloat = self.displayValueState == "io" ? 10.5 : y-0.2
-        let outputdY: CGFloat = self.displayValueState == "io" ? y-0.2 : 10.5
+        let inputY: CGFloat = self.displayValueState == "io" ? 12.0 : 3.0
+        let outputdY: CGFloat = self.displayValueState == "io" ? 3.0 : 12.0
         
         var inputCircle = NSBezierPath()
         inputCircle = NSBezierPath(ovalIn: CGRect(x: x, y: inputY, width: size, height: size))
@@ -466,8 +464,8 @@ public class SpeedWidget: WidgetWrapper {
     
     private func drawChars(_ width: CGFloat) {
         let rowHeight: CGFloat = self.frame.height / 2
-        let inputY: CGFloat = self.displayValueState == "io" ? rowHeight+1 : 1
-        let outputY: CGFloat = self.displayValueState == "io" ? 1 : rowHeight+1
+        let inputY: CGFloat = self.displayValueState == "io" ? rowHeight + 1.5 : 2.5
+        let outputY: CGFloat = self.displayValueState == "io" ? 2.5 : rowHeight + 1.5
         let x: CGFloat = self.iconAlignmentState == "left" ? Constants.Widget.margin.x : Constants.Widget.margin.x+(width-6)
         
         let inputAttributes = [
@@ -477,7 +475,7 @@ public class SpeedWidget: WidgetWrapper {
         ]
         var rect = CGRect(x: x, y: inputY, width: 8, height: rowHeight)
         var str = NSAttributedString.init(string: self.symbols.input, attributes: inputAttributes)
-        str.draw(with: rect)
+        str.draw(in: rect)
         
         let outputAttributes = [
             NSAttributedString.Key.font: NSFont.systemFont(ofSize: 9, weight: .regular),
@@ -486,7 +484,7 @@ public class SpeedWidget: WidgetWrapper {
         ]
         rect = CGRect(x: x, y: outputY, width: 8, height: rowHeight)
         str = NSAttributedString.init(string: self.symbols.output, attributes: outputAttributes)
-        str.draw(with: rect)
+        str.draw(in: rect)
     }
     
     // MARK: - settings

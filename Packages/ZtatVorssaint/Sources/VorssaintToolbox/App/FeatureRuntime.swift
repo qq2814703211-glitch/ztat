@@ -75,7 +75,7 @@ final class FeatureRuntime: ObservableObject {
         // Nothing is quit until the helper is running: without it, terminating
         // would close the app instead of restarting it.
         guard (try? DetachedProcess.spawn(
-            "/bin/sh", ["-c", script, "vorssaint-relaunch", pid, path])) != nil
+            "/bin/sh", ["-c", script, "ztat-relaunch", pid, path])) != nil
         else { return }
         NSApp.terminate(nil)
     }
@@ -389,7 +389,7 @@ final class FeatureRuntime: ObservableObject {
             ClipboardAutoClearService.shared.syncWithPreferences()
         },
         .mediaTools: {
-            NotchFileToolsService.shared.syncWithPreferences()
+            if AppFeature.notch.isAvailable { NotchFileToolsService.shared.syncWithPreferences() }
             guard !AppFeature.mediaTools.isAvailable else { return }
             MediaService.shared.cancel()
             ScreenRecorderService.shared.closeEditors(ownedBy: .mediaTools)
@@ -399,7 +399,7 @@ final class FeatureRuntime: ObservableObject {
         .finderRename: { FinderRenameService.shared.syncWithPreferences() },
         .shelf: {
             ShelfService.shared.syncWithPreferences()
-            NotchFileToolsService.shared.syncWithPreferences()
+            if AppFeature.notch.isAvailable { NotchFileToolsService.shared.syncWithPreferences() }
         },
         .urlCleaner: { URLCleanerService.shared.syncWithPreferences() },
         .diskImageInstaller: { DiskImageInstallerService.shared.syncWithPreferences() },
@@ -450,47 +450,20 @@ final class FeatureRuntime: ObservableObject {
         .cameraPreview: { CameraPreviewService.shared.syncWithPreferences() },
         .wallpaper: { WallpaperService.shared.syncWithPreferences() },
         .radialMenu: { RadialMenuService.shared.syncWithPreferences() },
-        .notch: { NotchService.shared.syncWithPreferences() },
-        .notchGestures: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-        },
-        .notchTimer: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchTimerService.shared.stop() }
-        },
-        .notchAccessories: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchAccessoryService.shared.stop() }
-        },
-        .notchLyrics: {
-            if !NotchLyricsSupport.isEnabled() { NotchLyricsService.shared.stop() }
-        },
-        .notchQueue: { NotchMusicService.shared.syncQueuePreference() },
-        .notchLiveEqualizer: { NotchAudioLevelService.shared.syncWithPreferences() },
-        .notchNotifications: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchNotificationService.shared.stop() }
-        },
-        .notchDownloads: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchDownloadService.shared.stop() }
-        },
-        .notchCalendar: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchCalendarService.shared.stop() }
-        },
-        .notchAgents: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { AgentUsageService.shared.stop() }
-        },
-        .notchWatch: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-            else { NotchWatchService.shared.stop() }
-        },
-        // Leaving folds the wings it rests in, and coming back greets.
-        .notchMascot: {
-            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
-        },
+        // ZTAT-PATCH: Vorssaint Dynamic Island & all 12 extensions are replaced by native ZtatIsland (Atoll).
+        .notch: {},
+        .notchGestures: {},
+        .notchTimer: {},
+        .notchAccessories: {},
+        .notchLyrics: {},
+        .notchQueue: {},
+        .notchLiveEqualizer: {},
+        .notchNotifications: {},
+        .notchDownloads: {},
+        .notchCalendar: {},
+        .notchAgents: {},
+        .notchWatch: {},
+        .notchMascot: {},
         .scratchpad: { ScratchpadService.shared.syncWithPreferences() },
         .commandBar: { CommandBarService.shared.syncWithPreferences() },
         .cleaner: {

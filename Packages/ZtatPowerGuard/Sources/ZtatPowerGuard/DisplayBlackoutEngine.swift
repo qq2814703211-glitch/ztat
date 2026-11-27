@@ -43,7 +43,7 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
 
     private init() {
         loadPrivateSymbols()
-        if let persisted = UserDefaults.standard.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double {
+        if let persisted = PowerGuardDefaults.store.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double {
             _savedBrightness = Float(persisted)
         }
     }
@@ -73,6 +73,19 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    /// Returns true if this Mac has an online built-in laptop panel.
+    public func hasBuiltInDisplay() -> Bool {
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else {
+            return false
+        }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetOnlineDisplayList(count, &ids, &count) == .success else {
+            return false
+        }
+        return ids.prefix(Int(count)).contains(where: { CGDisplayIsBuiltin($0) != 0 })
     }
 
     /// Returns the built-in laptop panel ID if present, otherwise falls back to main display.
@@ -134,6 +147,10 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
     /// Drops built-in panel backlight to 0% while declaring display user activity so GPU/remote capture stays live.
     @discardableResult
     public func enableBlackout() -> Bool {
+        guard hasBuiltInDisplay() else {
+            ZtatLog.powerGuard.info("Skipped physical blackout: no built-in display present")
+            return false
+        }
         let current = readBrightness()
         let toSave: Float = {
             if let c = current, c > 0.05 { return c }
@@ -142,7 +159,7 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
         }()
 
         // Persist BEFORE mutating hardware brightness so a crash can always recover.
-        UserDefaults.standard.set(Double(toSave), forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
+        PowerGuardDefaults.store.set(Double(toSave), forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
         lock.withLock { _savedBrightness = toSave }
 
         renewFramebufferWakeAssertion()
@@ -151,7 +168,7 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
             lock.withLock { _isBlackoutActive = true }
             ZtatLog.powerGuard.info("Physical blackout enabled (saved brightness: \(Int(toSave * 100))%)")
         } else {
-            UserDefaults.standard.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
+            PowerGuardDefaults.store.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
         }
         return ok
     }
@@ -160,7 +177,7 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
     @discardableResult
     public func disableBlackout(retryOnFailure: Bool = true) -> Bool {
         let saved = lock.withLock { _savedBrightness }
-            ?? (UserDefaults.standard.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double).map { Float($0) }
+            ?? (PowerGuardDefaults.store.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double).map { Float($0) }
             ?? 0.65
         let target = max(0.08, min(1.0, saved))
 
@@ -191,11 +208,11 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
     /// Recovers brightness if the previous ztat process crashed while blackout was active.
     @discardableResult
     public func recoverFromCrashIfNeeded() -> Bool {
-        guard let persisted = UserDefaults.standard.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double else {
+        guard let persisted = PowerGuardDefaults.store.object(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness) as? Double else {
             return false
         }
         if let current = readBrightness(), current > 0.04 {
-            UserDefaults.standard.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
+            PowerGuardDefaults.store.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
             return false
         }
         let target = max(0.08, min(1.0, Float(persisted)))
@@ -213,7 +230,7 @@ public final class DisplayBlackoutEngine: @unchecked Sendable {
             _isBlackoutActive = false
             _savedBrightness = nil
         }
-        UserDefaults.standard.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
+        PowerGuardDefaults.store.removeObject(forKey: PowerGuardDefaultsKey.savedBlackoutBrightness)
     }
 
     private func scheduleRestoreRetries(target: Float, remainingAttempts: Int) {

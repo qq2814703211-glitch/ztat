@@ -7,8 +7,8 @@ enum NotchAccessorySupport {
     static let lowThreshold = 20
     static let recoveryThreshold = 25
     static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
+        // ZTAT-PATCH: Decouple Dynamic Island accessories from excluded .monitorPower gate.
         NotchSupport.isEnabled(in: defaults) && AppFeature.notchAccessories.isAvailable(in: defaults)
-            && AppFeature.monitorPower.isAvailable(in: defaults)
             && defaults.bool(forKey: DefaultsKey.notchAccessoriesEnabled)
     }
 

@@ -443,7 +443,7 @@ private final class DDCTransportGateRegistry: @unchecked Sendable {
 
 /// The transport and its non-Sendable target are only touched by this queue.
 private final class DDCBrightnessWorker: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.status-trio.ddc-brightness", qos: .utility)
+    private let queue = DispatchQueue(label: "dev.ztat.status.ddc-brightness", qos: .utility)
     private let transport: DDCFeatureTransport
     private let beforeReadValidation: @Sendable () -> Void
     private let gateRegistry: DDCTransportGateRegistry

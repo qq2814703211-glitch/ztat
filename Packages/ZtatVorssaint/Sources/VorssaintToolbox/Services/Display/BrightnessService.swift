@@ -210,7 +210,7 @@ final class BrightnessService: ObservableObject {
     private var swallowedKeyCodes = Set<Int>()
     /// Serializes every I2C transaction and rebuild; DDC displays drop
     /// commands that interleave.
-    private let workQueue = DispatchQueue(label: "com.vorssaint.utils.brightness", qos: .userInitiated)
+    private let workQueue = DispatchQueue(label: "dev.ztat.toolbox.utils.brightness", qos: .userInitiated)
     private let stateLock = NSLock()
     private var routes: [CGDirectDisplayID: Route] = [:]
     private struct PendingWrite {
@@ -272,7 +272,7 @@ final class BrightnessService: ObservableObject {
     /// Uptime of the last rescan a volume key started. Main thread only.
     private var lastVolumeKeyRescan: TimeInterval?
     /// The key tap uses the observer's snapshot. Its HAL checks run off the main loop.
-    private let audioOutputQueue = DispatchQueue(label: "com.vorssaint.utils.display-audio")
+    private let audioOutputQueue = DispatchQueue(label: "dev.ztat.toolbox.utils.display-audio")
     private var audioOutputGeneration = 0
     private var selectedAudioOutput: (id: AudioObjectID, monitorName: String?, uid: String?)?
     private var audioOutputListener: AudioObjectPropertyListenerBlock?
@@ -1445,7 +1445,7 @@ final class BrightnessService: ObservableObject {
             shouldStopFunctionKeyThread = false
             pendingFunctionKeyRestart = false
             let thread = Thread { [weak self] in self?.runFunctionKeyTap() }
-            thread.name = "Vorssaint Brightness Keys"
+            thread.name = "ztat Brightness Keys"
             thread.qualityOfService = .userInteractive
             functionKeyThread = thread
             return thread

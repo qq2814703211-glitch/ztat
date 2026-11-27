@@ -2013,7 +2013,7 @@ enum Defaults {
         DefaultsKey.screenshotUploadShortcutEnabled: false,
         DefaultsKey.screenshotUploadShortcut: GlobalShortcut.screenshotUploadDefault.storageValue,
         DefaultsKey.screenshotUploadDuration: ScreenshotShareDuration.oneHour.rawValue,
-        DefaultsKey.screenshotPreviewEnabled: true,
+        DefaultsKey.screenshotPreviewEnabled: false,
         DefaultsKey.screenshotPreviewDuration: ScreenshotSupport.defaultConfirmationPreviewDuration,
         DefaultsKey.screenshotSharingEnabled: true,
         DefaultsKey.panelUtilityScreenshot: true,

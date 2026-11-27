@@ -3,6 +3,7 @@
 
 import SwiftUI
 import ServiceManagement
+import ZtatCore
 
 /// App-wide startup and appearance settings.
 struct GeneralSettings: View {
@@ -25,19 +26,50 @@ struct GeneralSettings: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text(l10n.s.tabGeneral).font(.title2.bold())
-                basicsCard
-                appearanceCard
-                // ZTAT-PATCH: KeepAwake shortcut and Vorssaint feedback card omitted in ztat.
+                Text(ZtatL10n.tr("工具箱外观与玻璃材质", "Toolbox Glass & Visual Effects")).font(.title2.bold())
+                SettingsCard {
+                    HStack(spacing: 12) {
+                        Image(systemName: "gearshape.2.fill")
+                            .font(.title3)
+                            .foregroundStyle(Color.accentColor)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(ZtatL10n.tr("开机启动、全局语言与深浅外观", "Launch at Login, Language & Appearance"))
+                                .font(.headline)
+                            Text(ZtatL10n.tr(
+                                "这些全局设置已统一收敛至 ztat「通用」页面，在此处仅保留工具箱浮窗材质选项。",
+                                "Global startup, language, and appearance now live in ztat General Settings."
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(ZtatL10n.tr("前往通用设置", "Open General")) {
+                            ZtatHostBridge.shared.openSettings(route: .general)
+                        }
+                        .controlSize(.small)
+                    }
+                }
+                if LiquidGlassSupport.isSupported {
+                    SettingsCard(title: appearanceStrings.liquidGlass) {
+                        SettingsRow(symbol: "sparkles", title: appearanceStrings.liquidGlass,
+                                    caption: text.liquidGlassCaption) { EmptyView() }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Toggle(text.liquidGlassOtherWindows, isOn: $appearance.liquidGlassEnabled)
+                                .accessibilityLabel("\(appearanceStrings.liquidGlass), \(text.liquidGlassOtherWindows)")
+                            if AppFeature.notch.isAvailable {
+                                Toggle(FeatureStrings.notch(l10n.language).title,
+                                       isOn: $appearance.notchLiquidGlassEnabled)
+                                    .accessibilityLabel("\(appearanceStrings.liquidGlass), \(FeatureStrings.notch(l10n.language).title)")
+                            }
+                        }
+                        .toggleStyle(TrailingSwitchToggleStyle())
+                        .padding(.leading, settingsRowTextInset)
+                    }
+                }
             }
             .frame(maxWidth: 760)
             .frame(maxWidth: .infinity)
             .padding(22)
-        }
-        .onAppear { refreshLaunchAtLogin() }
-        .onReceive(NotificationCenter.default.publisher(
-            for: LaunchAtLoginSupport.settingsRefreshRequested)) { _ in
-            refreshLaunchAtLogin()
         }
     }
 

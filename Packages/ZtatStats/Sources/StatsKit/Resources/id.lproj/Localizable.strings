@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Hapus instalasi pembantu kipas"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "Setujui di Pengaturan Sistem ▸ Item Login"; // gemma4:31b
 "Fan helper needs your approval" = "Alat bantu kipas membutuhkan persetujuan Anda"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Untuk mengontrol kipas, aktifkan Stats di Pengaturan Sistem ▸ Item Login."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Untuk mengontrol kipas, aktifkan ztat di Pengaturan Sistem ▸ Item Login."; // gemma4:31b
 "Open Login Items" = "Buka Item Login"; // gemma4:31b
 "Could not enable the fan helper" = "Tidak dapat mengaktifkan helper kipas"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Buka Pengaturan Sistem ▸ Item Login, pastikan Stats diizinkan di latar belakang, kemudian coba lagi."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Buka Pengaturan Sistem ▸ Item Login, pastikan ztat diizinkan di latar belakang, kemudian coba lagi."; // gemma4:31b
 "Fan value" = "Nilai kipas"; // gemma4:31b
 "Turn off fan" = "Matikan kipas"; // translategemma:4b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Anda akan mematikan kipas. Ini adalah tindakan yang tidak direkomendasikan yang dapat merusak Mac Anda, apakah Anda yakin ingin melakukannya?"; // gemma4:31b

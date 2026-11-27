@@ -61,7 +61,7 @@ enum CleanerPolicy {
     /// each learned the hard way by the cleaners that came before.
     private static let hiddenCachePrefixes = [
         "dev.ztat.", // ZTAT-PATCH: Protect ztat's own cache directory from Junk Cleaner.
-        "com.vorssaint",
+        "dev.ztat",
         "CloudKit", "com.apple.bird",
         "com.apple.coreaudio", "com.apple.audio.", "coreaudiod",
         "com.apple.systempreferences", "com.apple.controlcenter",

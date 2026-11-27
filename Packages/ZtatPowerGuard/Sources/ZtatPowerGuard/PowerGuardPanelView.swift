@@ -6,6 +6,7 @@ import ZtatCore
 /// Embedded PowerGuard panel hosted inside ztat's unified Liquid Glass menu bar hub (356pt width).
 public struct PowerGuardPanelView: View {
     @ObservedObject private var coordinator: PowerGuardCoordinator
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
     @State private var showOptions: Bool = false
     @State private var showLogs: Bool = false
 
@@ -14,7 +15,25 @@ public struct PowerGuardPanelView: View {
     }
 
     public var body: some View {
+        let _ = l10n.revision
         VStack(spacing: 10) {
+            if coordinator.needsManualSleepRecovery {
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(ZtatL10n.tr("上次退出未恢复合盖休眠", "Unclean exit left sleep disabled"))
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer(minLength: 4)
+                    Button(ZtatL10n.tr("立即恢复", "Restore")) {
+                        coordinator.disableAll()
+                    }
+                    .controlSize(.mini)
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(cardBackground(highlighted: true, accent: .orange))
+            }
             heroCard
             durationRow
             quickActionsRow

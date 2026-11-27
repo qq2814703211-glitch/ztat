@@ -36,7 +36,7 @@ final class SettingsTransferSession: ObservableObject {
         self.localization = localization
         self.backupDirectory = backupDirectory ?? FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask
-        )[0].appendingPathComponent("StatusTrio/Settings Backups", isDirectory: true)
+        )[0].appendingPathComponent("ztat/Settings Backups", isDirectory: true)
     }
 
     func exportData() throws -> Data {
@@ -98,7 +98,7 @@ final class SettingsTransferSession: ObservableObject {
         )
         // Read live in-memory slider values into the backup, not potentially
         // stale coalesced defaults. No setter or persistent flush before success.
-        let backupURL = backupDirectory.appendingPathComponent("StatusTrio-\(UUID().uuidString).json")
+        let backupURL = backupDirectory.appendingPathComponent("ztat-Status-\(UUID().uuidString).json")
         do {
             let backup = try exportData()
             try FileManager.default.createDirectory(

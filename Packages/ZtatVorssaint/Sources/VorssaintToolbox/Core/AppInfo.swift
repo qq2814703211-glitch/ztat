@@ -8,11 +8,11 @@ import ZtatCore // ZTAT-PATCH: Rebrand visible app identity to ztat per upstream
 enum AppInfo {
     static let name = ZtatBrand.appName
     static let copyright = "© 2026 ztat (GPL-3.0-or-later)"
-    static let websiteURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
-    static let repositoryURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
-    static let coffeeURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
-    static let discordURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
-    static let socialURL = URL(string: "https://github.com/vorssaint/vorssaint-utils")!
+    static let websiteURL = URL(string: "https://github.com/dearglory/ztat")!
+    static let repositoryURL = URL(string: "https://github.com/dearglory/ztat")!
+    static let coffeeURL = URL(string: "https://github.com/dearglory/ztat")!
+    static let discordURL = URL(string: "https://github.com/dearglory/ztat")!
+    static let socialURL = URL(string: "https://github.com/dearglory/ztat")!
 
     /// The bundle version.
     static var version: String {
@@ -39,6 +39,6 @@ enum AppInfo {
     /// this into the Developer bundle only, so you can confirm at a glance that the
     /// running dev app matches the source you are about to change. nil in the official app.
     static var buildCommit: String? {
-        Bundle.main.object(forInfoDictionaryKey: "VorssaintBuildCommit") as? String
+        Bundle.main.object(forInfoDictionaryKey: "ZtatBuildCommit") as? String
     }
 }

@@ -9,7 +9,7 @@ import SwiftUI
 /// a menu bar app, so `NSLog` only reaches a terminal that launched it; the
 /// unified log is the only channel a user-facing report can be checked against.
 private let powerHelperLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "powerHelper"
 )
 
@@ -106,7 +106,9 @@ final class SystemPrivilegedHelperService: PrivilegedHelperServicing {
 /// System Settings owns background authorization independently of this switch.
 @MainActor
 final class PrivilegedHelperManager: ObservableObject {
-    static let shared = PrivilegedHelperManager()
+    // ZTAT-PATCH: Back PrivilegedHelperManager.shared with ZtatPowerGuardHelperService so
+    // Low/High Power Modes & Auto Low Power Mode work natively without an upstream XPC LaunchDaemon.
+    static let shared = PrivilegedHelperManager(service: ZtatPowerGuardHelperService())
 
     @Published private(set) var status: PrivilegedHelperStatus
     @Published private(set) var didFailLastOperation = false

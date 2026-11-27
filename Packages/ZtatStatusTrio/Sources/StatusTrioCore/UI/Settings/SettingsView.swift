@@ -499,7 +499,8 @@ struct SettingsView: View {
                 inputSourceController: inputSourceController,
                 previewIsDark: previewIsDarkBinding,
                 onShowIconGuide: onShowIconGuide,
-                subtopic: subtopicIfSelectionMatches(.appIcon)
+                subtopic: subtopicIfSelectionMatches(.appIcon),
+                isEmbeddedInUnifiedSettings: isEmbeddedInUnifiedSettings
             )
         case .battery:
             BatterySectionView(
@@ -547,7 +548,8 @@ struct SettingsView: View {
                 globalShortcutController: globalShortcutController,
                 statusStore: statusStore,
                 chargeToFullNow: chargeToFullNow,
-                transferSession: transferSession
+                transferSession: transferSession,
+                isEmbeddedInUnifiedSettings: isEmbeddedInUnifiedSettings
             )
         case .about:
             AboutSectionView()

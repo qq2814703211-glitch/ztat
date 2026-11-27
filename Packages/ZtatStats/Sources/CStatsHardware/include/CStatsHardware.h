@@ -17,6 +17,12 @@
 #include <IOKit/storage/ata/ATASMARTLib.h>
 #include <libproc.h>
 #include <stdint.h>
+#include <sys/resource.h>
+
+// Safe C inline wrapper for proc_pid_rusage(RUSAGE_INFO_V4) avoiding Swift pointer-rebinding UB
+static inline int ztat_proc_pid_rusage_v4(int pid, struct rusage_info_v4 *out) {
+    return proc_pid_rusage(pid, RUSAGE_INFO_V4, (rusage_info_t *)out);
+}
 
 // MARK: - Apple Silicon HID Sensors (Sensors/bridge.h)
 
@@ -45,6 +51,12 @@ void AppleSiliconSensorsReset(void);
 // MARK: - IOReport (CPU/bridge.h, GPU/bridge.h, Sensors/bridge.h)
 
 typedef struct IOReportSubscriptionRef *IOReportSubscriptionRef;
+
+static inline void ztat_ioreport_release_subscription(IOReportSubscriptionRef sub) {
+    if (sub != NULL) {
+        CFRelease((CFTypeRef)sub);
+    }
+}
 
 CFDictionaryRef IOReportCopyAllChannels(uint64_t a, uint64_t b);
 CFDictionaryRef IOReportCopyChannelsInGroup(CFStringRef a, CFStringRef b, uint64_t c, uint64_t d, uint64_t e);

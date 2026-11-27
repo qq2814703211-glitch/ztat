@@ -244,6 +244,42 @@ struct StatusPopoverView: View {
                     Divider()
                 }
             }
+
+            if isEmbeddedInHub {
+                Divider().opacity(0.45)
+                HStack(spacing: 8) {
+                    Button {
+                        ZtatHostBridge.shared.openSettings(route: .statusTrio(sectionID: "popover"))
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.system(size: 10.5, weight: .medium))
+                            Text(ZtatL10n.tr("自定义状态卡片…", "Customize Cards…"))
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer(minLength: 4)
+
+                    Button {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.ControlCenter-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "switch.2")
+                                .font(.system(size: 10.5, weight: .medium))
+                            Text(ZtatL10n.tr("控制中心设置", "Control Center"))
+                                .font(.system(size: 11))
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 2)
+            }
         }
         // The volume device list is summary-only: keep its lifecycle tied to
         // this page so leaving for a detail route stops it, while scrolling a
@@ -267,9 +303,8 @@ struct StatusPopoverView: View {
     /// dropped when every display is hidden, so no empty section or dangling
     /// separator is left behind (#241).
     private var displayedSections: [PopupSection] {
-        // ZTAT-PATCH: Hide built-in Prevent Sleep / StatusTrioPowerHelper quickActions section;
-        // keep-awake and clamshell lock are owned by ZtatPowerGuard in ztat's unified hub.
-        panel.displayedSummarySections.filter { $0 != .quickActions }
+        // ZTAT-PATCH: Restore .quickActions (backed directly by ZtatPowerGuardRegistry in ztat).
+        panel.displayedSummarySections
     }
 
     /// The footer only renders on the summary route, so its rule follows the
@@ -315,11 +350,15 @@ struct StatusPopoverView: View {
                 }
             )
         case .quickActions:
-            QuickActionsCardView(
-                control: panel.store.sleepControl,
-                showsDisplay: panel.settings.showsKeepScreenButton,
-                showsLid: panel.settings.showsLidSleepButton
-            )
+            if isEmbeddedInHub {
+                ZtatEmbeddedPowerGuardQuickActionsView()
+            } else {
+                QuickActionsCardView(
+                    control: panel.store.sleepControl,
+                    showsDisplay: panel.settings.showsKeepScreenButton,
+                    showsLid: panel.settings.showsLidSleepButton
+                )
+            }
         case .network:
             WiFiPowerSummaryView(panel: panel,
                 state: panel.network,
@@ -421,6 +460,78 @@ struct StatusPopoverView: View {
     private func copyValue(_ value: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+    }
+}
+
+/// ZTAT-PATCH: Compact Quick Actions row inside the Status tab, wired directly to ZtatPowerGuardRegistry
+/// so Idle Keep-Awake, Clamshell Lock, and 0% Blackout stay 100% synchronized with the Guard tab & Dynamic Island.
+private struct ZtatEmbeddedPowerGuardQuickActionsView: View {
+    @ObservedObject private var registry = ZtatPowerGuardRegistry.shared
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
+
+    var body: some View {
+        let _ = l10n.revision
+        let snap = registry.snapshot
+        HStack(spacing: 6) {
+            quickPill(
+                symbol: snap.isIdleKeepAwakeActive ? "cup.and.saucer.fill" : "cup.and.saucer",
+                title: ZtatL10n.tr("防休眠", "Awake"),
+                active: snap.isIdleKeepAwakeActive,
+                tint: .green
+            ) {
+                registry.toggleIdleKeepAwake()
+            }
+
+            quickPill(
+                symbol: snap.isClamshellLocked ? "lock.laptopcomputer" : "laptopcomputer",
+                title: ZtatL10n.tr("合盖锁", "Clamshell"),
+                active: snap.isClamshellLocked,
+                tint: .orange
+            ) {
+                registry.toggleClamshellLock()
+            }
+
+            quickPill(
+                symbol: snap.isBlackoutActive ? "moon.fill" : "display",
+                title: ZtatL10n.tr("熄屏 0%", "Blackout"),
+                active: snap.isBlackoutActive,
+                tint: .indigo
+            ) {
+                registry.toggleBlackoutMode()
+            }
+        }
+    }
+
+    private func quickPill(
+        symbol: String,
+        title: String,
+        active: Bool,
+        tint: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 11, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 11, weight: active ? .semibold : .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(active ? tint : .primary.opacity(0.85))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .padding(.horizontal, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(active ? tint.opacity(0.16) : Color.primary.opacity(0.055))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(active ? tint.opacity(0.35) : Color.clear, lineWidth: 0.8)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

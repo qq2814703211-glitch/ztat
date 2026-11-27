@@ -161,7 +161,7 @@ open class WidgetWrapper: NSView, widget_p {
         self.type = type
         self.title = title
         self.shadowSize = frame.size
-        self.queue = DispatchQueue(label: "eu.exelban.Stats.WidgetWrapper.\(type.rawValue).\(title)")
+        self.queue = DispatchQueue(label: "dev.ztat.stats.WidgetWrapper.\(type.rawValue).\(title)")
         
         super.init(frame: frame)
     }
@@ -349,14 +349,19 @@ public class SWidget {
             })
         } else {
             let preservePosition = self.keepMenuBarPosition || Store.shared.bool(key: "CombinedModules", defaultValue: false)
-            DispatchQueue.main.async(execute: {
+            let removeWork = {
                 guard let item = self.menuBarItem else { return }
                 if preservePosition {
                     saveNSStatusItemPosition(id: autosaveID)
                 }
                 NSStatusBar.system.removeStatusItem(item)
                 self.menuBarItem = nil
-            })
+            }
+            if Thread.isMainThread {
+                removeWork()
+            } else {
+                DispatchQueue.main.async(execute: removeWork)
+            }
         }
     }
     
@@ -365,6 +370,7 @@ public class SWidget {
             NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: [
                 "module": self.module,
                 "widget": self.type,
+                "window": window,
                 "origin": window.frame.origin,
                 "center": window.frame.width/2
             ])
@@ -407,7 +413,7 @@ public class MenuBar {
     
     init(moduleName: String) {
         self.moduleName = moduleName
-        self.queue = DispatchQueue(label: "eu.exelban.Stats.MenuBar.\(moduleName)")
+        self.queue = DispatchQueue(label: "dev.ztat.stats.MenuBar.\(moduleName)")
         self.oneView = Store.shared.bool(key: "\(self.moduleName)_oneView", defaultValue: self.oneView)
         self.view.identifier = NSUserInterfaceItemIdentifier(rawValue: moduleName)
         
@@ -477,7 +483,7 @@ public class MenuBar {
     private func setupMenuBarItem(_ state: Bool) {
         // ZTAT-PATCH: Prefix NSStatusItem autosaveName with "ztat.stats." to isolate from StatusTrio/Vorssaint
         let autosaveID = "ztat.stats.\(self.moduleName)"
-        DispatchQueue.main.async(execute: {
+        let work = {
             if state && self.active {
                 guard self.menuBarItem == nil else { return }
                 restoreNSStatusItemPosition(id: autosaveID)
@@ -500,7 +506,12 @@ public class MenuBar {
                 NSStatusBar.system.removeStatusItem(item)
                 self.menuBarItem = nil
             }
-        })
+        }
+        if Thread.isMainThread {
+            work()
+        } else {
+            DispatchQueue.main.async(execute: work)
+        }
     }
     
     private func recalculateWidth() {
@@ -521,6 +532,7 @@ public class MenuBar {
         if let item = self.menuBarItem, let window = item.button?.window {
             NotificationCenter.default.post(name: .togglePopup, object: nil, userInfo: [
                 "module": self.moduleName,
+                "window": window,
                 "origin": window.frame.origin,
                 "center": window.frame.width/2
             ])

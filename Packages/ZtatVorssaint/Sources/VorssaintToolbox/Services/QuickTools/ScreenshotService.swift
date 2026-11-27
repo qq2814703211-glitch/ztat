@@ -230,7 +230,7 @@ final class ScreenshotService: ObservableObject {
         guard !finishScrollingCaptureIfActive(), !chooser.cancelCountdownIfActive(),
               directCaptureTask == nil,
               !ScreenshotSelectionController.isSessionOnScreen else { return }
-        guard Permissions.shared.screenRecording else {
+        guard Permissions.shared.checkScreenRecordingLive() else {
             Permissions.shared.requestScreenRecording()
             return
         }
@@ -290,7 +290,7 @@ final class ScreenshotService: ObservableObject {
     private func captureScrolling(_ region: RecorderSupport.Region) {
         guard scrollingTask == nil else { return }
         let automatic = UserDefaults.standard.bool(forKey: DefaultsKey.screenshotScrollingAutoScroll)
-        if automatic, !Permissions.shared.accessibility {
+        if automatic, !Permissions.shared.checkAccessibilityLive() {
             Permissions.shared.requestAccessibility()
             return
         }
@@ -382,10 +382,14 @@ final class ScreenshotService: ObservableObject {
         preview?.close()
         RecentCaptureService.shared.recordScreenshot(capture)
         let defaults = UserDefaults.standard
-        if defaults.bool(forKey: DefaultsKey.screenshotCopyToClipboard) {
+        let defaultAction = ScreenshotDefaultAction.current
+        let previewEnabled = defaults.bool(forKey: DefaultsKey.screenshotPreviewEnabled)
+        // ZTAT-PATCH: When preview popup is off (default) and no save/edit default action is set,
+        // ensure the capture still reaches the clipboard silently instead of vanishing.
+        if defaults.bool(forKey: DefaultsKey.screenshotCopyToClipboard)
+            || (defaultAction == .none && !previewEnabled) {
             autoCopy(capture)
         }
-        let defaultAction = ScreenshotDefaultAction.current
         if defaultAction == .edit {
             // The editor decides what is kept. Its Add to Shelf puts the
             // finished picture there, so the raw capture is not shelved too.
@@ -1108,7 +1112,7 @@ final class ScreenshotService: ObservableObject {
 /// without holding a full-resolution screenshot in memory while the app rests.
 enum ScreenshotLastCaptureStore {
     private static let writeQueue = DispatchQueue(
-        label: "com.vorssaint.utils.latest-screenshot",
+        label: "dev.ztat.toolbox.utils.latest-screenshot",
         qos: .utility)
     private static let stateLock = NSLock()
     private static var generation = 0

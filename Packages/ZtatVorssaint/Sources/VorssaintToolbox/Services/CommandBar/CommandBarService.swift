@@ -2175,7 +2175,8 @@ final class CommandBarService: ObservableObject {
                     self?.confirmForceQuit(running, name: app.name)
                 })
             }
-            if AppFeature.uninstaller.isAvailable, UninstallerSupport.selection(for: app.url) != nil {
+            // ZTAT-PATCH: Always offer Uninstall action in CommandBar and bridge it directly to native ZtatCleaner.
+            if UninstallerSupport.selection(for: app.url) != nil {
                 actions.append(RowAction(id: "uninstallApp",
                                          title: String(format: bar.uninstallAppFormat, app.name),
                                          symbolName: "trash") { [weak self] in

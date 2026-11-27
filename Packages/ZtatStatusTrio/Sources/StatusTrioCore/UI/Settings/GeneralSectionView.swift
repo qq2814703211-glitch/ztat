@@ -8,6 +8,7 @@ struct GeneralSectionView: View {
     /// so previews/tests can render the pane without the full app graph.
     var statusStore: SystemStatusStore? = nil
     var chargeToFullNow: ChargeToFullNowController? = nil
+    var isEmbeddedInUnifiedSettings: Bool = false
     /// The Settings root supplies its stable session. Standalone panes own a local fallback.
     @StateObject private var transferSession: SettingsTransferSession
 
@@ -17,13 +18,15 @@ struct GeneralSectionView: View {
         globalShortcutController: GlobalShortcutController? = nil,
         statusStore: SystemStatusStore? = nil,
         chargeToFullNow: ChargeToFullNowController? = nil,
-        transferSession: SettingsTransferSession? = nil
+        transferSession: SettingsTransferSession? = nil,
+        isEmbeddedInUnifiedSettings: Bool = false
     ) {
         self.store = store
         self.localization = localization
         self.globalShortcutController = globalShortcutController
         self.statusStore = statusStore
         self.chargeToFullNow = chargeToFullNow
+        self.isEmbeddedInUnifiedSettings = isEmbeddedInUnifiedSettings
         _transferSession = StateObject(wrappedValue: transferSession ?? SettingsTransferSession(
             store: store, localization: localization
         ))
@@ -35,7 +38,10 @@ struct GeneralSectionView: View {
 
     var body: some View {
         SettingsPage {
-            systemGroup
+            // ZTAT-PATCH: Language & Launch at Login live canonically in ztat's top-level General Settings.
+            if !isEmbeddedInUnifiedSettings {
+                systemGroup
+            }
             quickActionsGroup
             statusCheckGroup
             SettingsTransferView(
@@ -48,7 +54,9 @@ struct GeneralSectionView: View {
             }
         }
         .onAppear {
-            launchAtLogin.refresh()
+            if !isEmbeddedInUnifiedSettings {
+                launchAtLogin.refresh()
+            }
         }
     }
 
@@ -251,31 +259,6 @@ struct GeneralSectionView: View {
                 title: localization.string(.settingsUpdatesAutomatic),
                 isOn: updaterManager.automaticallyChecksForUpdatesBinding
             )
-        }
-    }
-
-    private var analyticsGroup: some View {
-        SettingsGroup(localization.string(.settingsAnalyticsTitle)) {
-            SettingsToggleRow(
-                symbol: "chart.bar.xaxis",
-                tint: .purple,
-                title: localization.string(.onboardingAnalyticsToggle),
-                subtitle: localization.string(.settingsAnalyticsDescription),
-                isOn: Binding(
-                    get: { store.sharesAnonymousAnalytics },
-                    set: { store.setSharesAnonymousAnalytics($0) }
-                )
-            )
-
-            SettingsDivider()
-
-            Link(
-                localization.string(.settingsAnalyticsPrivacyDetails),
-                destination: URL(string: "https://github.com/lingyired/status-trio/blob/main/docs/privacy-telemetry.md")!
-            )
-            .font(.system(size: 11))
-            .padding(.horizontal, SettingsMetrics.rowPaddingH)
-            .padding(.vertical, 9)
         }
     }
 }

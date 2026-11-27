@@ -168,9 +168,9 @@ struct PopoverSectionView: View {
         }
     }
 
-    // ZTAT-PATCH: Keep-awake (.quickActions) is owned by ZtatPowerGuard in ztat's unified hub.
+    // ZTAT-PATCH: Restore .quickActions (backed by ZtatPowerGuard in ztat's unified hub).
     private var visiblePopupSectionOrder: [PopupSection] {
-        store.popupSectionOrder.filter { $0 != .quickActions }
+        store.popupSectionOrder
     }
 
     private var popupOrderGroup: some View {
@@ -206,12 +206,8 @@ struct PopoverSectionView: View {
                         .padding(.vertical, 3)
                     }
                     .onMove { source, destination in
-                        // ZTAT-PATCH: Reorder visible popup sections while keeping hidden .quickActions preserved.
                         var reordered = visiblePopupSectionOrder
                         reordered.move(fromOffsets: source, toOffset: destination)
-                        if store.popupSectionOrder.contains(.quickActions) {
-                            reordered.append(.quickActions)
-                        }
                         store.setPopupSectionOrder(reordered)
                     }
                 }

@@ -5,27 +5,25 @@ import SwiftUI
 import ZtatCore
 import ZtatPowerGuard
 import ZtatStatsHost
+import StatusTrioCore
+import ZtatIsland
 import VorssaintToolbox
 
-extension Notification.Name {
-    static let ztatHubPanelVisibilityDidChange = Notification.Name("dev.ztat.hubPanelVisibilityDidChange")
-}
-
-/// Unified 356pt Liquid Glass Hub root view hosted inside Status Trio's AnchoredStatusPanel.
-/// Combines:
-///  1. 状态 (Status Trio — Wi-Fi, Battery, Bluetooth/ANC, Audio, Input, DDC Display)
-///  2. 保活 (ZtatPowerGuard — Remote-Ready, Clamshell Lock, 0% Physical Blackout, Live Telemetry)
-///  3. 工具箱 (ZtatVorssaint — Per-App Volume Mixer >100%, Quick Tools, Clipboard, XDR, Island)
-///  4. 监控 (ZtatStats — 9 Hardware Metrics menu bar controls & Stats configuration)
+/// Unified 356pt Liquid Glass Hub root view hosted inside ztat's primary menu bar panel.
 struct ZtatHubRootView: View {
     let statusTrioBody: AnyView
-    let onOpenSettings: (ZtatSettingsSection) -> Void
+    let onOpenSettings: (ZtatSettingsRoute) -> Void
 
     @State private var selectedTab: ZtatHubTab = .status
+    @State private var isHubVisible: Bool = true
     @ObservedObject private var powerGuard = PowerGuardCoordinator.shared
     @ObservedObject private var statsHost = ZtatStatsHost.shared
+    @ObservedObject private var islandHost = ZtatIslandHost.shared
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
+    @ObservedObject private var taskShortcut = ZtatTaskManagerShortcutStore.shared
 
     var body: some View {
+        let _ = l10n.revision
         VStack(spacing: 8) {
             headerBar
             tabStrip
@@ -35,6 +33,10 @@ struct ZtatHubRootView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .top)
+        .onChange(of: selectedTab) { _, newTab in
+            ZtatStatusTrioHost.shared.activeHubTabDidChange(newTab)
+            powerGuard.setPanelVisible(isHubVisible && newTab == .powerGuard)
+        }
         .onReceive(NotificationCenter.default.publisher(for: .ztatOpenHubTab)) { note in
             if let raw = note.object as? String, let tab = ZtatHubTab(rawValue: raw) {
                 selectedTab = tab
@@ -43,8 +45,9 @@ struct ZtatHubRootView: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .ztatHubPanelVisibilityDidChange)) { note in
-            let isVisible = (note.object as? Bool) ?? false
-            powerGuard.setPanelVisible(isVisible && selectedTab == .powerGuard)
+            let visible = (note.object as? Bool) ?? false
+            isHubVisible = visible
+            powerGuard.setPanelVisible(visible && selectedTab == .powerGuard)
         }
     }
 
@@ -63,7 +66,7 @@ struct ZtatHubRootView: View {
 
             Spacer(minLength: 4)
 
-            // Live clickable PowerGuard status pill (surfaces remote-ready keep-awake right in the header)
+            // Live clickable PowerGuard status pill
             Button {
                 if selectedTab == .powerGuard {
                     powerGuard.toggleRemoteReadyMode()
@@ -93,7 +96,19 @@ struct ZtatHubRootView: View {
             .help(ZtatL10n.tr("保活与熄屏状态（点击切换保活页，再次点击开关保活）", "Keep-awake & blackout status (click for Guard tab)"))
 
             Button {
-                onOpenSettings(settingsSection(for: selectedTab))
+                NotificationCenter.default.post(name: .ztatOpenTaskManager, object: nil)
+            } label: {
+                Image(systemName: "list.bullet.rectangle.portrait.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.primary.opacity(0.06)))
+            }
+            .buttonStyle(.plain)
+            .help(ZtatL10n.tr("打开任务管理器（全局快捷键 \(taskShortcut.displayString)）", "Open Task Manager (\(taskShortcut.displayString))"))
+
+            Button {
+                onOpenSettings(settingsRoute(for: selectedTab))
             } label: {
                 Image(systemName: "gearshape.fill")
                     .font(.system(size: 12, weight: .medium))
@@ -102,25 +117,49 @@ struct ZtatHubRootView: View {
                     .background(Circle().fill(Color.primary.opacity(0.06)))
             }
             .buttonStyle(.plain)
+            .help(ZtatL10n.tr("打开 ztat 设置 (⌘,)", "Open ztat Settings (⌘,)"))
             .keyboardShortcut(",", modifiers: .command)
-            .help(ZtatL10n.tr("打开 ztat 统一设置 (⌘,)", "Open ztat Unified Settings (⌘,)"))
 
             Menu {
-                Button(ZtatL10n.tr("打开统一设置...", "Unified Settings...")) {
-                    onOpenSettings(settingsSection(for: selectedTab))
+                Button(ZtatL10n.tr("统一设置…", "Settings…")) {
+                    onOpenSettings(.general)
                 }
-                Button(ZtatL10n.tr("本机硬件概览...", "Hardware Dashboard...")) {
-                    statsHost.openNativeStatsSettings(selecting: "dashboard")
+                Button(ZtatL10n.tr("权限与隐私…", "Permissions & Privacy…")) {
+                    onOpenSettings(.permissions)
+                }
+                Button(ZtatL10n.tr("设备与硬件概览…", "Hardware Dashboard…")) {
+                    onOpenSettings(.stats(target: "dashboard"))
+                }
+                Button(ZtatL10n.tr("灵动岛设置…", "Dynamic Island Settings…")) {
+                    onOpenSettings(.island(sectionID: "general"))
+                }
+                Button(ZtatL10n.tr("应用卸载与深度清理…", "App Uninstaller & Cleaner…")) {
+                    onOpenSettings(.cleaner(sectionID: "apps"))
+                }
+                Divider()
+                Button(islandHost.isEnabled
+                       ? ZtatL10n.tr("展开/收起灵动岛", "Toggle Dynamic Island")
+                       : ZtatL10n.tr("启用灵动岛", "Enable Dynamic Island")) {
+                    if islandHost.isEnabled {
+                        islandHost.toggleNotchOpen()
+                    } else {
+                        islandHost.setEnabled(true)
+                    }
+                }
+                if islandHost.isEnabled {
+                    Button(ZtatL10n.tr("暂停灵动岛", "Pause Dynamic Island")) {
+                        islandHost.setEnabled(false)
+                    }
                 }
                 Divider()
                 Button(powerGuard.isAnyGuardActive
-                       ? ZtatL10n.tr("停止所有保活守护", "Disable Keep-Awake Guard")
+                       ? ZtatL10n.tr("停止保活与合盖锁", "Disable Keep-Awake Guard")
                        : ZtatL10n.tr("一键合盖+远程保活", "Enable Remote-Ready Guard")) {
                     powerGuard.toggleRemoteReadyMode()
                 }
                 Button(powerGuard.isBlackoutActive
-                       ? ZtatL10n.tr("恢复内建屏幕亮度", "Restore Display Brightness")
-                       : ZtatL10n.tr("开启物理熄屏 0% (⌘⌥B 恢复)", "Enable 0% Physical Blackout")) {
+                       ? ZtatL10n.tr("退出物理熄屏", "Exit Physical Blackout")
+                       : ZtatL10n.tr("物理熄屏 0% (⌘⌥B 恢复)", "0% Physical Blackout (⌘⌥B)")) {
                     powerGuard.toggleBlackoutMode()
                 }
                 Divider()
@@ -129,7 +168,7 @@ struct ZtatHubRootView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(width: 24, height: 24)
                     .background(Circle().fill(Color.primary.opacity(0.06)))
@@ -206,21 +245,21 @@ struct ZtatHubRootView: View {
             PowerGuardPanelView(coordinator: powerGuard)
         case .toolbox:
             ZtatVorssaintHost.shared.makeToolboxPanelView {
-                onOpenSettings(.toolbox)
+                onOpenSettings(.toolbox(itemID: nil))
             }
         case .monitor:
             StatsHubControlView(host: statsHost) {
-                onOpenSettings(.stats)
+                onOpenSettings(.stats(target: "overview"))
             }
         }
     }
 
-    private func settingsSection(for tab: ZtatHubTab) -> ZtatSettingsSection {
+    private func settingsRoute(for tab: ZtatHubTab) -> ZtatSettingsRoute {
         switch tab {
-        case .status: return .statusTrio
+        case .status: return .statusTrio(sectionID: "appIcon")
         case .powerGuard: return .powerGuard
-        case .toolbox: return .toolbox
-        case .monitor: return .stats
+        case .toolbox: return .toolbox(itemID: nil)
+        case .monitor: return .stats(target: "overview")
         }
     }
 }

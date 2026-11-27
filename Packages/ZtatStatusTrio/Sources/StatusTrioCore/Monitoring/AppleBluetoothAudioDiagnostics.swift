@@ -94,7 +94,7 @@ final class AppleBluetoothAudioDiagnosticReporter: @unchecked Sendable {
     }
 
     private static let logger = Logger(
-        subsystem: "com.lingsmbp.StatusTrio",
+        subsystem: "dev.ztat.app",
         category: "AppleBluetoothAudio"
     )
 

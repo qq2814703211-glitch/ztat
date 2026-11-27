@@ -312,7 +312,7 @@ enum SettingsBackupSupport {
         if let xdg = environment["XDG_CONFIG_HOME"], xdg.hasPrefix("/") {
             base = URL(fileURLWithPath: xdg, isDirectory: true)
         }
-        var folder = "vorssaint"
+        var folder = "ztat"
         if isDeveloperBuild {
             folder += "-dev"
         }

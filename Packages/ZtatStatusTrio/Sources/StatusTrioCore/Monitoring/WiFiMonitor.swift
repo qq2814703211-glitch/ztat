@@ -5,7 +5,7 @@ import SystemConfiguration
 import os
 
 private let wifiMonitorLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "WiFiMonitor"
 )
 

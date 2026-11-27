@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "फैन हेल्पर की स्थापना रद्द करें";
 "Approve in System Settings ▸ Login Items" = "सिस्टम सेटिंग्स ▸ लॉगिन आइटम में अनुमोदित करें"; // gemma4:31b
 "Fan helper needs your approval" = "फैन हेल्पर को आपकी अनुमति की आवश्यकता है"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "पंखों को नियंत्रित करने के लिए, सिस्टम सेटिंग्स ▸ लॉगिन आइटम में Stats को सक्षम करें।"; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "पंखों को नियंत्रित करने के लिए, सिस्टम सेटिंग्स ▸ लॉगिन आइटम में ztat को सक्षम करें।"; // gemma4:31b
 "Open Login Items" = "लॉगिन आइटम खोलें"; // gemma4:31b
 "Could not enable the fan helper" = "फैन हेल्पर को सक्षम नहीं किया जा सका"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "सिस्टम सेटिंग्स ▸ लॉगिन आइटम खोलें, सुनिश्चित करें कि Stats को बैकग्राउंड में अनुमति दी गई है, फिर से प्रयास करें।"; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "सिस्टम सेटिंग्स ▸ लॉगिन आइटम खोलें, सुनिश्चित करें कि ztat को बैकग्राउंड में अनुमति दी गई है, फिर से प्रयास करें।"; // gemma4:31b
 "Fan value" = "फैन वैल्यू";
 "Turn off fan" = "पंखा बंद करें";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "आप पंखे को बंद करने जा रहे हैं। यह अनुशंसित कार्रवाई नहीं है जो आपके मैक को नुकसान पहुंचा सकती है, क्या आप वाकई ऐसा करना चाहते हैं?";

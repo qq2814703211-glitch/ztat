@@ -868,7 +868,7 @@ internal class Popup: PopupWrapper {
             if !self.publicIPState {
                 self.addressView?.removeFromSuperview()
             } else if let view = self.addressView {
-                self.insertArrangedSubview(view, at: 4)
+                self.insertArrangedSubview(view, at: min(5, self.arrangedSubviews.count))
             }
             self.recalculateHeight()
         })

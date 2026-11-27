@@ -982,6 +982,7 @@ public enum SMCHelperInstallState {
 public class SMCHelper {
     public static let shared = SMCHelper()
 
+    public var isSupported: Bool { false }
     public var isInstalled: Bool { false }
     public var requiresApproval: Bool { false }
 

@@ -346,8 +346,10 @@ final class SettingsStore: ObservableObject {
     /// regular section but is not part of this default set, so a new install
     /// starts with it switched off. An existing stored selection is honoured
     /// as-is, so a user who already has the row keeps it.
-    // ZTAT-PATCH: Omit .quickActions from defaults because ZtatPowerGuard owns keep-awake/clamshell lock in ztat.
-    static let defaultEnabledPopupSections: Set<PopupSection> = [.battery, .network, .volume]
+    // ZTAT-PATCH: Provide rich out-of-the-box status cards (with .quickActions powered by ZtatPowerGuard).
+    static let defaultEnabledPopupSections: Set<PopupSection> = [
+        .battery, .quickActions, .network, .bluetooth, .volume, .brightness
+    ]
     /// Metrics shown by the hardware-monitor card, in display order.
     static let defaultHardwareMonitorMetricOrder: [HardwareMonitorMetric] = HardwareMonitorMetric.allCases
     static let defaultEnabledHardwareMonitorMetrics: Set<HardwareMonitorMetric> =
@@ -3157,9 +3159,10 @@ final class SettingsStore: ObservableObject {
         self.showsBluetoothPowerControl = defaults.object(
             forKey: Self.showsBluetoothPowerControlDefaultsKey
         ) as? Bool ?? true
+        // ZTAT-PATCH: Enable Power Mode controls by default in ztat (backed by ZtatPowerGuard pmset engine).
         self.controlsLowPowerMode = defaults.object(
             forKey: Self.controlsLowPowerModeDefaultsKey
-        ) as? Bool ?? false
+        ) as? Bool ?? true
         self.autoEnablesLowPowerMode = defaults.object(
             forKey: Self.autoEnablesLowPowerModeDefaultsKey
         ) as? Bool ?? false

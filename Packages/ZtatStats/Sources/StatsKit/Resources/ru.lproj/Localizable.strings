@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Удалить помощник для вентилятора";
 "Approve in System Settings ▸ Login Items" = "Разрешить в Системных настройках ▸ Элементы входа"; // qwen3.8:27b
 "Fan helper needs your approval" = "Помощник вентилятора требует вашего разрешения"; // qwen3.8:27b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Чтобы управлять вентиляторами, включите Stats в Системных настройках ▸ Элементы входа."; // qwen3.8:27b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Чтобы управлять вентиляторами, включите ztat в Системных настройках ▸ Элементы входа."; // qwen3.8:27b
 "Open Login Items" = "Открыть элементы входа"; // qwen3.8:27b
 "Could not enable the fan helper" = "Не удалось включить помощник вентилятора"; // qwen3.8:27b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Откройте Системные настройки ▸ Элементы входа, убедитесь, что Stats разрешён в фоновом режиме, затем повторите попытку."; // qwen3.8:27b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Откройте Системные настройки ▸ Элементы входа, убедитесь, что ztat разрешён в фоновом режиме, затем повторите попытку."; // qwen3.8:27b
 "Fan value" = "Значение вентилятора";
 "Turn off fan" = "Выключить вентилятор";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Вы собираетесь выключить вентилятор. Это не рекомендуемое действие, которое может сломать ваш Mac. Вы уверены, что хотите это сделать?";

@@ -9,7 +9,10 @@ public enum ZtatBrand {
     public static let bundleIdentifier = "dev.ztat.app"
     public static let devBundleIdentifier = "dev.ztat.app.dev"
     public static let statsDefaultsSuite = "dev.ztat.app.stats"
+    public static let powerGuardDefaultsSuite = "dev.ztat.app.powerguard"
     public static let powerGuardDefaultsPrefix = "ztat.powerGuard."
+    public static let islandDefaultsSuite = "dev.ztat.app.island"
+    public static let cleanerDefaultsSuite = "dev.ztat.app.cleaner"
     public static let version = "1.0.0"
     public static let buildNumber = "1"
     public static let hubPanelWidth: CGFloat = 356
@@ -31,21 +34,31 @@ public enum ZtatBrand {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
+
+    public static var configDirectory: URL {
+        let dir = URL(fileURLWithPath: NSHomeDirectory())
+            .appendingPathComponent(".config", isDirectory: true)
+            .appendingPathComponent(appName, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
 }
 
 public enum ZtatLog {
     public static let app = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "App")
-    public static let statusTrio = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "StatusTrio")
-    public static let stats = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Stats")
+    public static let statusTrio = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Status")
+    public static let stats = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Monitor")
     public static let powerGuard = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "PowerGuard")
-    public static let vorssaint = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Vorssaint")
+    public static let island = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Island")
+    public static let cleaner = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Cleaner")
+    public static let toolbox = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Toolbox")
+    public static let vorssaint = toolbox
     public static let perf = Logger(subsystem: ZtatBrand.bundleIdentifier, category: "Performance")
 }
 
 public enum ZtatL10n {
     public static var isChinese: Bool {
-        let preferred = Locale.preferredLanguages.first?.lowercased() ?? "en"
-        return preferred.hasPrefix("zh")
+        ZtatLocalizationStore.currentIsChinese
     }
 
     @inline(__always)

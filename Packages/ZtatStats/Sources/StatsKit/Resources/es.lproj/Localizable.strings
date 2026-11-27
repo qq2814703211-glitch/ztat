@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Desinstalar fan helper";
 "Approve in System Settings ▸ Login Items" = "Aprobar en Ajustes del Sistema ▸ Ítems de inicio"; // gemma4:31b
 "Fan helper needs your approval" = "El ayudante del ventilador necesita tu aprobación"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Para controlar los ventiladores, activa Stats en Ajustes del Sistema ▸ Ítems de inicio."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Para controlar los ventiladores, activa ztat en Ajustes del Sistema ▸ Ítems de inicio."; // gemma4:31b
 "Open Login Items" = "Abrir elementos de inicio"; // gemma4:31b
 "Could not enable the fan helper" = "No se pudo habilitar el asistente del ventilador"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Abre Ajustes del Sistema ▸ Ítems de inicio, asegúrate de que Stats esté permitido en segundo plano y luego inténtalo de nuevo."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Abre Ajustes del Sistema ▸ Ítems de inicio, asegúrate de que ztat esté permitido en segundo plano y luego inténtalo de nuevo."; // gemma4:31b
 "Fan value" = "Valor de ventilador";
 "Turn off fan" = "Apagar ventilador";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Vas a apagar el ventilador. Esto puede dañar tu Mac y no se recomienda. ¿Seguro que quieres hacerlo?";

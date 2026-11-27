@@ -9,7 +9,7 @@ import os
 /// a user-facing bug report can be checked against, so each failure records its
 /// stable code with the detail the daemon returned (#383).
 private let lidSleepLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "SleepControl"
 )
 

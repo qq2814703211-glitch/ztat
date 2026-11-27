@@ -72,7 +72,22 @@
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>ztat displays your upcoming calendar events in Dynamic Island when enabled. Events remain strictly on this Mac.</string>
+	<string>ztat displays your upcoming calendar events in Dynamic Island and lock screen widgets when enabled. Events remain strictly on this Mac.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>ztat displays your upcoming calendar events in Dynamic Island when enabled.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>ztat displays your upcoming reminders in Dynamic Island and lock screen widgets when enabled. Reminders remain strictly on this Mac.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>ztat displays your upcoming reminders in Dynamic Island when enabled.</string>
+	<key>NSAppleMusicUsageDescription</key>
+	<string>ztat uses Apple Music artwork for Dynamic Island playback and optional lock screen media widgets.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>ztat uses Screen Recording for screenshots, screen recording, window previews, OCR, and optional Dynamic Island capture tools.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>ztat uses Automation to control media playback, open requested calendar dates, and organize files or trash items you explicitly confirm.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
@@ -87,5 +102,38 @@
 	<string>ztat accesses removable volumes only when you explicitly select them as a destination.</string>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>NSSystemAdministrationUsageDescription</key>
+	<string>ztat may request administrator approval when removing protected system-domain app leftovers or managing LaunchDaemons you explicitly confirm.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>dev.ztat.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ztat</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Uninstall with ztat</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>handleUninstallServiceRequest</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>com.apple.application-bundle</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

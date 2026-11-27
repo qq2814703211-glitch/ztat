@@ -43,7 +43,7 @@ final class AppUpdatesService: ObservableObject {
     @Published private(set) var hasCheckedThisSession = false
     @Published private(set) var lastError: String?
 
-    private let workQueue = DispatchQueue(label: "com.vorssaint.appupdates", qos: .utility)
+    private let workQueue = DispatchQueue(label: "dev.ztat.toolbox.appupdates", qos: .utility)
     private lazy var lookupSession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
@@ -870,7 +870,7 @@ final class AppUpdatesService: ObservableObject {
         // ZTAT-PATCH: Protect ztat's own bundle IDs in AppUpdatesService.
         bundleID == Bundle.main.bundleIdentifier
             || bundleID.hasPrefix("dev.ztat.")
-            || bundleID.hasPrefix("com.vorssaint")
+            || bundleID.hasPrefix("dev.ztat")
     }
 
     private static let ownPackageTokens: Set<String> = ["ztat", "vorssaint", "vorssaint@beta", "vorssaint-beta"]

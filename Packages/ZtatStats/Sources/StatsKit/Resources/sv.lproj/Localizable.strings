@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Avinstallera fläkthjälpare";
 "Approve in System Settings ▸ Login Items" = "Godkänn i Systeminställningar ▸ Inloggningsobjekt"; // gemma4:31b
 "Fan helper needs your approval" = "Fläkthjälpprogrammet behöver ditt godkännande"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "För att styra fläktarna, aktivera Stats i Systeminställningar ▸ Inloggningsobjekt."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "För att styra fläktarna, aktivera ztat i Systeminställningar ▸ Inloggningsobjekt."; // gemma4:31b
 "Open Login Items" = "Öppna inloggningsobjekt"; // gemma4:31b
 "Could not enable the fan helper" = "Kunde inte aktivera fläkthjälparen"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Öppna Systeminställningar ▸ Inloggningsobjekt, se till att Stats är tillåtet i bakgrunden, och försök sedan igen."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Öppna Systeminställningar ▸ Inloggningsobjekt, se till att ztat är tillåtet i bakgrunden, och försök sedan igen."; // gemma4:31b
 "Fan value" = "Fläktvärde";
 "Turn off fan" = "Stäng av fläkt";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Du håller på att stänga av fläkten. Detta är en inte rekommenderad åtgärd som kan skada din Mac, är du säker på att du vill göra detta?";

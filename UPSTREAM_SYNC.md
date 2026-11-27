@@ -1,6 +1,6 @@
 # `ztat` 上游同步与二次开发规范 (Upstream Sync & Maintenance Handbook)
 
-本文档定义 `ztat` 仓库如何**长期追踪、比对、同步四个上游项目更新**，以及如何**低冲突地新增需求或替换功能**。
+本文档定义 `ztat` 仓库如何**长期追踪、比对、同步五个上游项目更新**，以及如何**低冲突地新增需求或替换功能**。
 
 ---
 
@@ -12,9 +12,11 @@
 Sources/ZtatApp/              ← 100% ztat 自有代码（主入口、统一面板、统一设置、品牌图标）
 Packages/ZtatCore/            ← 100% ztat 自有基础库（事件总线、统一剪贴板轮询、身份常量、本地化桥）
 Packages/ZtatPowerGuard/      ← 100% ztat 洁净室保活引擎与 ztat-hold CLI（融合 BudHold 交互理念 + Vorssaint 安全底座）
+Packages/ZtatCleaner/         ← 100% ztat 洁净室应用卸载与深度清理套件（吸收 Pearcleaner 全套工作流，替换 Vorssaint 基础卸载器）
 ───────────────────────────────────────────────────────────────────────────────
 Packages/ZtatStatusTrio/      ← 上游 status-trio 隔离模块（仅包含最小化补丁，注释标记 // ZTAT-PATCH:）
 Packages/ZtatStats/           ← 上游 exelban/stats 纯 SPM 移植模块（注释标记 // ZTAT-PATCH:）
+Packages/ZtatIsland/          ← 上游 Ebullioscopic/Atoll 纯 SPM 原生灵动岛模块（替换 Vorssaint 灵动岛，注释标记 // ZTAT-PATCH:）
 Packages/ZtatVorssaint/       ← 上游 vorssaint-utils 去重后模块（注释标记 // ZTAT-PATCH:）
 ```
 
@@ -25,17 +27,17 @@ Packages/ZtatVorssaint/       ← 上游 vorssaint-utils 去重后模块（注�
 4. **菜单栏铁律（Menu Bar Contract）**：
    - 仅 `ZtatStatusTrio` 拥有主 `NSStatusItem`（统一三合一状态图标，左键打开 `ztat` 统一面板）。
    - 仅 `ZtatStats` 拥有硬件监控指标 `NSStatusItem`（按用户开关显示，默认不展示多余图标）。
-   - 其他任何模块（`ZtatPowerGuard`、`ZtatVorssaint` 及未来新模块）**默认禁止创建独立 `NSStatusItem`**，除非用户显式开启了"特别开启的独立菜单栏项"（如剪贴板实时预览）。
+   - 其他任何模块（`ZtatPowerGuard`、`ZtatIsland`、`ZtatVorssaint` 及未来新模块）**默认禁止创建独立 `NSStatusItem`**，除非用户显式开启了"特别开启的独立菜单栏项"（如剪贴板实时预览）。
 5. **命名空间铁律（Zero Collision Contract）**：
-   - `ZtatStats` 的 `UserDefaults` 强制隔离在 `dev.ztat.app.stats`，所有 `NSStatusItem.autosaveName` 加 `ztat.stats.` 前缀，所有 `Notification.Name` 加 `ztat.stats.` 前缀。
-   - `ZtatStatusTrio`、`ZtatVorssaint`、`ZtatPowerGuard` 各自独立为 SwiftPM target，所有 `internal` 符号天然隔离，对外仅暴露 `*Host` 门面。
-6. **严禁引入闭源/无证代码**：`budhold` 仓库未提供开源 LICENSE，仅作功能与体验参考（`integrationMode: "clean-room-feature-reference"`），同步其新点子时须采用洁净室重写，禁止直接拷贝源码文件。
+   - `ZtatStats` 的 `UserDefaults` 强制隔离在 `dev.ztat.app.stats`，`ZtatIsland` 的 `UserDefaults` 与 `KeyboardShortcuts` 强制隔离在 `dev.ztat.app.island`，所有 `NSStatusItem.autosaveName` 加 `ztat.stats.` 前缀，所有 `Notification.Name` 加对应模块前缀。
+   - `ZtatStatusTrio`、`ZtatIsland`、`ZtatVorssaint`、`ZtatPowerGuard` 各自独立为 SwiftPM target，所有 `internal` 符号天然隔离，对外仅暴露 `*Host` 门面。
+6. **严禁引入闭源/无证/GPL 不兼容代码**：`budhold`（无开源 LICENSE）与 `pearcleaner`（Apache 2.0 + Commons Clause，与 GPL-3.0-or-later 不兼容）仅作功能与体验参考（`integrationMode: "clean-room-feature-reference"`），同步其新点子时须采用洁净室重写，禁止直接拷贝源码文件。
 
 ---
 
 ## 2. 上游锁文件：`upstreams.lock.json`
 
-`upstreams.lock.json` 是 `ztat` 与四个上游同步状态的**唯一真相源**，记录：
+`upstreams.lock.json` 是 `ztat` 与五个上游同步状态的**唯一真相源**，记录：
 - `url` / `branch` / `commit`（已同步的精确 SHA）/ `describe`（标签偏移）
 - `license` 与 `integrationMode`
 - `targetPath`（在 `ztat` 中的落盘位置）
@@ -61,7 +63,7 @@ Packages/ZtatVorssaint/       ← 上游 vorssaint-utils 去重后模块（注�
 - 落后提交数（`commits behind`）
 
 ### 步骤 2：审阅目标上游的变更清单与代码 Diff
-以同步 `status-trio` 或 `stats` 或 `vorssaint-utils` 为例：
+以同步 `status-trio`、`stats`、`atoll` 或 `vorssaint-utils` 为例：
 ```bash
 # 查看自上次同步以来的 commit 摘要与修改文件列表
 ./scripts/sync-upstream.sh diff status-trio
@@ -71,9 +73,9 @@ Packages/ZtatVorssaint/       ← 上游 vorssaint-utils 去重后模块（注�
 ```
 
 ### 步骤 3：应用更新（按上游类型区分）
-- **对于 `status-trio` / `stats` / `vorssaint-utils`（代码同步）**：
+- **对于 `status-trio` / `stats` / `atoll` / `vorssaint-utils`（代码同步）**：
   1. 切出专用同步分支：`git checkout -b sync/<upstream>-<YYYYMMDD>`
-  2. 过滤掉 `excludedFeatures` / `excludedComponents` 中的文件（如 `vorssaint-utils` 的 `Services/SystemMonitor`、`Services/Metrics`、`Services/FanControl`、`KeepAwakeManager`；`stats` 的 `Kit/lldb`、`Modules/Remote`、`*/widget.swift`）。
+  2. 过滤掉 `excludedFeatures` / `excludedComponents` 中的文件（如 `vorssaint-utils` 的 `Services/SystemMonitor`、`Services/Metrics`、`Services/FanControl`、`KeepAwakeManager`、13 项 `notch*`；`stats` 的 `Kit/lldb`、`Modules/Remote`；`atoll` 的 `Sparkle`、`LaunchAtLogin`、`PerAppVolume`、`Onboarding`）。
   3. 使用三路比对或增量同步：
      ```bash
      # 预览文件级新增/修改/删除计划（dry-run）
@@ -107,8 +109,8 @@ git commit -m "sync(<name>): update upstream to <short-sha> (<tag>)"
 1. **新增独立小工具 / 跨模块能力**：
    - 核心逻辑放 `Packages/ZtatCore/` 或新建 `Packages/Ztat<Feature>/`。
    - UI 接入 `Sources/ZtatApp/ZtatHubRootView.swift` 的对应标签页，禁止新增独立菜单栏图标。
-2. **用更优秀的第 5 款开源软件替换 Vorssaint 某项现有功能**（例如未来替换截屏/剪贴板/窗口管理）：
-   - 在 `upstreams.lock.json` 中新增第 5 个 upstream 条目。
+2. **用更优秀的开源软件替换 Vorssaint 某项现有功能**（例如未来替换截屏/剪贴板/窗口管理）：
+   - 在 `upstreams.lock.json` 中新增对应的 upstream 条目。
    - 在 `Packages/ZtatVorssaint` 的 `excludedFeatures` 中禁用对应 `AppFeature`（并移除/关闭其后台服务）。
    - 在 `Packages/Ztat<NewTool>` 中封装新工具并暴露统一 `*Host` 门面给 `Sources/ZtatApp/`。
 3. **性能优化提交规范**：

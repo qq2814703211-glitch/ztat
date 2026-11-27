@@ -36,8 +36,11 @@ enum FeaturePreset: String, CaseIterable, Identifiable {
     var features: Set<AppFeature> {
         switch self {
         case .essential:
-            // ZTAT-PATCH: Non-overlapping essential toolbox preset (monitor/keepAwake handled by ZtatStats & ZtatPowerGuard).
-            return [.mixer, .clipboardHistory, .screenshot, .windowLayout, .quickToggles, .notch]
+            // ZTAT-PATCH: Non-overlapping essential toolbox preset
+            // (monitor/keepAwake/dynamicIsland are handled natively by ZtatStats, ZtatPowerGuard & ZtatIsland).
+            return [
+                .mixer, .clipboardHistory, .screenshot, .windowLayout, .quickToggles,
+            ]
         case .windows:
             return [.switcher, .windowLayout, .dockPreview, .dockClick, .windowMaximizer]
         case .battery:

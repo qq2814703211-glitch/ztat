@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "விசிறி உதவியாளரை நீக்கு";
 "Approve in System Settings ▸ Login Items" = "System Settings ▸ Login Items-இல் அங்கீகரி";
 "Fan helper needs your approval" = "விசிறி உதவியாளரின் அங்கீகாரம் தேவை";
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "விசிறிகளைக் கட்டுப்படுத்த, System Settings ▸ Login Items-இல் Stats-ஐ இயக்கவும்.";
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "விசிறிகளைக் கட்டுப்படுத்த, System Settings ▸ Login Items-இல் ztat-ஐ இயக்கவும்.";
 "Open Login Items" = "Login Items-ஐத் திற";
 "Could not enable the fan helper" = "விசிறி உதவியாளரை இயக்க முடியவில்லை";
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "System Settings ▸ Login Items-ஐத் திறந்து, Stats பின்னணியில் அனுமதிக்கப்பட்டுள்ளதா என்று உறுதி செய்து, மீண்டும் முயற்சிக்கவும்.";
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "System Settings ▸ Login Items-ஐத் திறந்து, ztat பின்னணியில் அனுமதிக்கப்பட்டுள்ளதா என்று உறுதி செய்து, மீண்டும் முயற்சிக்கவும்.";
 "Fan value" = "விசிறி மதிப்பு";
 "Turn off fan" = "விசிறியை அணை";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "விசிறியை அணைக்கப் போகிறீர்கள். இது பரிந்துரைக்கப்படாத செயல், இது Mac-ஐ சேதப்படுத்தலாம். இதைச் செய்ய விரும்புகிறீர்களா?";

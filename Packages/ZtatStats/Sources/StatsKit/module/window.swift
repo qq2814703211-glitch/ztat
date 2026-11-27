@@ -107,7 +107,7 @@ open class Window: NSStackView {
     private let noNotificationsView: EmptyView = EmptyView(msg: localizedString("No notifications available in this module"))
     
     private var globalOneView: Bool {
-        Store.shared.bool(key: "OneView", defaultValue: false)
+        Store.shared.bool(key: "CombinedModules", defaultValue: false)
     }
     private var oneViewState: Bool {
         get { Store.shared.bool(key: "\(self.config.name)_oneView", defaultValue: false) }
@@ -452,6 +452,11 @@ open class Window: NSStackView {
     }
     
     @objc private func enableModule() {
+        if !self.widgets.contains(where: { $0.isActive }) {
+            if let defaultWidget = self.widgets.first(where: { $0.type == self.config.defaultWidget }) ?? self.widgets.first {
+                defaultWidget.toggle(true)
+            }
+        }
         NotificationCenter.default.post(name: .toggleModule, object: nil, userInfo: ["module": self.config.name, "state": true])
     }
     
@@ -722,10 +727,10 @@ private class WidgetPreview: NSStackView {
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: Constants.Widget.height))
         
         self.wantsLayer = true
-        self.layer?.cornerRadius = 2
-        self.layer?.borderColor = NSColor(red: 221/255, green: 221/255, blue: 221/255, alpha: 1).cgColor
+        self.layer?.cornerRadius = 5
+        self.layer?.borderColor = NSColor.separatorColor.cgColor
         self.layer?.borderWidth = 1
-        self.layer?.backgroundColor = NSColor.white.cgColor
+        self.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
         
         self.identifier = NSUserInterfaceItemIdentifier(rawValue: type.rawValue)
         self.setAccessibilityElement(true)
@@ -740,7 +745,7 @@ private class WidgetPreview: NSStackView {
         self.imageView.alphaValue = isActive ? 1 : 0.75
         if type == .icon {
             self.imageView.imageScaling = .scaleNone
-            self.imageView.contentTintColor = .black
+            self.imageView.contentTintColor = .labelColor
         }
         
         self.addArrangedSubview(self.imageView)

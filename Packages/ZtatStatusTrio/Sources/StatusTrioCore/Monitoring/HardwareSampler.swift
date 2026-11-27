@@ -2,14 +2,14 @@ import Foundation
 import OSLog
 
 private let temperatureLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "hardware-temperature"
 )
 
 /// One serial utility queue owns all Reader state and keeps IOKit off the main
 /// actor. Each result explicitly answers the requested IDs, including failures.
 final class HardwareSampler: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.lingsmbp.StatusTrio.hardware-sampler", qos: .utility)
+    private let queue = DispatchQueue(label: "dev.ztat.app.hardware-sampler", qos: .utility)
     private var cpuReader = CPUReader()
     private let gpuReader = GPUReader()
     private let memoryReader = MemoryReader()

@@ -20,7 +20,7 @@ Commands:
   lock <name> [sha]      Update upstreams.lock.json commit & describe for <name> (defaults to HEAD)
 
 Valid upstream names:
-  vorssaint-utils | status-trio | stats | budhold
+  vorssaint-utils | status-trio | stats | budhold | atoll | pearcleaner
 EOF
 }
 

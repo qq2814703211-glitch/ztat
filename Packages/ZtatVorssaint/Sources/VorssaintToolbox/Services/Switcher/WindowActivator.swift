@@ -60,7 +60,7 @@ final class SwitcherActivationWriteGuard {
 enum WindowActivator {
     private static let focusRetryDelay = WindowFocusHistory.switchConfirmationInterval
     private static let fullscreenFocusRetryDelays: [TimeInterval] = [0.18, 0.38, 0.68]
-    fileprivate static let activationAXQueue = DispatchQueue(label: "com.vorssaint.switcher-activation-ax",
+    fileprivate static let activationAXQueue = DispatchQueue(label: "dev.ztat.toolbox.switcher-activation-ax",
                                                                qos: .userInitiated)
     /// Reads of another process run here. A read can wait for the whole
     /// Accessibility timeout of an app that does not answer, and it never
@@ -74,7 +74,7 @@ enum WindowActivator {
     /// a second mechanism. The price is that a stalled read holds up the next
     /// activation's observations, never its first focus.
     fileprivate static let activationObservationQueue = DispatchQueue(
-        label: "com.vorssaint.switcher-activation-observation",
+        label: "dev.ztat.toolbox.switcher-activation-observation",
         qos: .userInitiated)
     private static let activationMainQueue = DispatchQueue.main
     private static var pendingMinimizeRestore: SwitcherWindowMinimizeRestore?

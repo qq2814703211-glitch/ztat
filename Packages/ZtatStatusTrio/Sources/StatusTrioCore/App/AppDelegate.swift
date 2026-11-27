@@ -2,7 +2,7 @@ import AppKit
 import os
 
 private let singleInstanceLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "SingleInstance"
 )
 

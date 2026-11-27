@@ -1031,7 +1031,7 @@ internal class FanView: NSStackView {
         
         let alert = NSAlert()
         alert.messageText = localizedString("Fan helper needs your approval")
-        alert.informativeText = localizedString("To control the fans, enable Stats in System Settings ▸ Login Items.")
+        alert.informativeText = localizedString("To control the fans, enable ztat in System Settings ▸ Login Items.")
         alert.addButton(withTitle: localizedString("Open Login Items"))
         alert.addButton(withTitle: localizedString("Cancel"))
         
@@ -1043,7 +1043,7 @@ internal class FanView: NSStackView {
     private func showInstallFailed() {
         let alert = NSAlert()
         alert.messageText = localizedString("Could not enable the fan helper")
-        alert.informativeText = localizedString("Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again.")
+        alert.informativeText = localizedString("Open System Settings ▸ Login Items, make sure ztat is allowed in the background, then try again.")
         alert.addButton(withTitle: localizedString("Open Login Items"))
         alert.addButton(withTitle: localizedString("Cancel"))
         
@@ -1076,7 +1076,8 @@ internal class FanView: NSStackView {
         let helperState = isInstalled ?? SMCHelper.shared.isInstalled
         self.helperInstalled = helperState
         
-        if !self.controlState {
+        // ZTAT-PATCH: When privileged fan writer is unsupported, show clean read-only fan telemetry without a dead "Install fan helper" button.
+        if !SMCHelper.shared.isSupported || !self.controlState {
             self.helperView?.removeFromSuperview()
             self.controlView?.removeFromSuperview()
             self.buttonsView?.removeFromSuperview()

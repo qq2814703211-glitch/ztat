@@ -152,7 +152,7 @@ public class BarChart: WidgetWrapper {
             var yMargin: CGFloat = 0
             for char in self.NSLabelCharts {
                 let rect = CGRect(x: x, y: yMargin, width: letterWidth, height: letterHeight)
-                char.draw(with: rect)
+                char.draw(in: rect)
                 yMargin += letterHeight
             }
             
@@ -162,9 +162,9 @@ public class BarChart: WidgetWrapper {
         
         let box = NSBezierPath(roundedRect: NSRect(
             x: x + offset,
-            y: offset,
+            y: 2.0,
             width: width - x - (offset*2) - (Constants.Widget.margin.x*2),
-            height: self.frame.size.height - (offset*2)
+            height: self.frame.size.height - 4.0
         ), xRadius: 2, yRadius: 2)
         
         if self.boxState {

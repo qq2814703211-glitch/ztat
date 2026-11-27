@@ -51,7 +51,7 @@ final class PermissionGuideOverlay {
         let view = PermissionGuideCard(guide: guide, permissionName: permissionName,
                                        kind: kind, model: model,
                                        onStartOver: { Permissions.shared.startOver(kind) },
-                                       onRelaunch: { appDelegate()?.relaunchApp() }) { [weak self] in
+                                       onRelaunch: { FeatureRuntime.shared.relaunchApp() }) { [weak self] in
             self?.dismiss()
         }
         let stale = DispatchWorkItem { model.stale = true }
@@ -189,6 +189,12 @@ private struct PermissionGuideCard: View {
                     Text(guide.waiting)
                         .font(.system(size: 12))
                         .foregroundStyle(.secondary)
+                    if kind == .screenRecording {
+                        Spacer(minLength: 8)
+                        Button(guide.relaunch, action: onRelaunch)
+                            .controlSize(.small)
+                            .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .padding(.top, 2)
@@ -199,8 +205,15 @@ private struct PermissionGuideCard: View {
                         .font(.system(size: 11))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(guide.startOver, action: onStartOver)
-                        .controlSize(.small)
+                    HStack(spacing: 8) {
+                        if kind == .screenRecording {
+                            Button(guide.relaunch, action: onRelaunch)
+                                .controlSize(.small)
+                                .buttonStyle(.borderedProminent)
+                        }
+                        Button(guide.startOver, action: onStartOver)
+                            .controlSize(.small)
+                    }
                 }
                 .padding(.top, 2)
             }

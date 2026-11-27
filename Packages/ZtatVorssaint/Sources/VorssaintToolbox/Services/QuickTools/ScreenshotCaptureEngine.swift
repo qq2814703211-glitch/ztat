@@ -13,13 +13,26 @@ import ScreenCaptureKit
 /// tool taking them; the rest of the app follows the visibility preference.
 enum ScreenshotCaptureEngine {
 
+    private static func shareableContent() async -> SCShareableContent? {
+        do {
+            return try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+        } catch let err as NSError where err.domain == SCStreamErrorDomain && err.code == SCStreamError.userDeclined.rawValue {
+            await MainActor.run {
+                Permissions.shared.checkScreenRecordingLive()
+                Permissions.shared.requestScreenRecording()
+            }
+            return nil
+        } catch {
+            return nil
+        }
+    }
+
     /// Full-resolution capture of one display.
     static func captureDisplay(_ displayID: CGDirectDisplayID,
                                includePointer: Bool,
                                hideVorssaintWindows: Bool,
                                protectedWindowIDs: Set<CGWindowID>) async -> CGImage? {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(
-            false, onScreenWindowsOnly: true)
+        guard let content = await shareableContent()
         else { return nil }
         guard let display = content.displays.first(where: { $0.displayID == displayID })
         else { return nil }
@@ -70,8 +83,7 @@ enum ScreenshotCaptureEngine {
                                      hideVorssaintWindows: Bool,
                                      protectedWindowIDs: Set<CGWindowID>,
                                      keepsIslandOut: Bool = false) async -> RegionCapture? {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(
-            false, onScreenWindowsOnly: true),
+        guard let content = await shareableContent(),
             let display = content.displays.first(where: { $0.displayID == displayID })
         else { return nil }
         let scale = screenScale(for: displayID)
@@ -102,8 +114,7 @@ enum ScreenshotCaptureEngine {
     static func captureAllDisplays(includePointer: Bool,
                                    hideVorssaintWindows: Bool,
                                    protectedWindowIDs: Set<CGWindowID>) async -> [CGDirectDisplayID: CGImage] {
-        guard let content = try? await SCShareableContent.excludingDesktopWindows(
-            false, onScreenWindowsOnly: true)
+        guard let content = await shareableContent()
         else { return [:] }
         let ownWindows = await excludedOwnWindows(in: content,
                                             hideVorssaintWindows: hideVorssaintWindows,

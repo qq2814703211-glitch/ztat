@@ -241,6 +241,13 @@ open class Module {
             $0.terminate()
         }
         self.menuBar.disable()
+        if let popup = self.popup {
+            popup.locked = false
+            popup.openedBy = nil
+            popup.setIsVisible(false)
+            self.popup = nil
+        }
+        NotificationCenter.default.removeObserver(self)
         debug("Module terminated", log: self.log)
     }
     
@@ -384,6 +391,11 @@ open class Module {
         }
     }
     
+    // ZTAT-PATCH: Optional unified popover interceptor (e.g. VitalsPopoverWindow) for individual menu bar modules.
+    // Returns true when handled; Option-click or userInfo["forceClassic"] == true bypasses to classic Stats popup.
+    public static var customPopupToggleHandler: ((_ moduleName: String, _ anchorWindow: NSWindow?, _ origin: CGPoint, _ center: CGFloat) -> Bool)? = nil
+    public static var customPopupDismissHandler: (() -> Void)? = nil
+
     @objc private func listenForPopupToggle(_ notification: Notification) {
         guard let name = notification.userInfo?["module"] as? String,
               let buttonOrigin = notification.userInfo?["origin"] as? CGPoint,
@@ -391,12 +403,30 @@ open class Module {
               self.config.name == name else {
             return
         }
+
+        // ZTAT-PATCH: Route individual Stats menu bar clicks to Vitals unified popover (or classic on Option-click)
+        let forceClassic = (notification.userInfo?["forceClassic"] as? Bool) == true
+        let optionHeld = (NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags).contains(.option)
+        let vitalsDefault = Store.shared.bool(key: "VitalsUnifiedPopover", defaultValue: true)
+        let shouldUseVitals = !forceClassic && self.moduleType != .clock && (vitalsDefault ? !optionHeld : optionHeld)
+        if shouldUseVitals, let handler = Module.customPopupToggleHandler {
+            let anchorWindow = notification.userInfo?["window"] as? NSWindow
+            if handler(self.config.name, anchorWindow, buttonOrigin, buttonCenter) {
+                self.popup?.locked = false
+                self.popup?.openedBy = nil
+                self.popup?.dismissIfUnlocked()
+                return
+            }
+        }
+        Module.customPopupDismissHandler?()
         
         if self.popup?.isVisible != true, let view = self.popupView as? PopupWrapper {
             view.prepareForDisplay()
         }
         if self.popup == nil {
-            self.popup = PopupWindow(title: self.config.name, module: self.moduleType, view: self.popupView, visibilityCallback: self.popupVisibilityCallback)
+            self.popup = PopupWindow(title: self.config.name, module: self.moduleType, view: self.popupView, visibilityCallback: { [weak self] state in
+                self?.popupVisibilityCallback(state)
+            })
         }
         guard let popup = self.popup else { return }
         
@@ -406,7 +436,7 @@ open class Module {
             popup.openedBy = widget
         }
         
-        if popup.occlusionState.rawValue == 8192 || reopen {
+        if !popup.isVisible || reopen {
             popup.contentView?.invalidateIntrinsicContentSize()
             
             let windowCenter = popup.contentView!.intrinsicContentSize.width / 2

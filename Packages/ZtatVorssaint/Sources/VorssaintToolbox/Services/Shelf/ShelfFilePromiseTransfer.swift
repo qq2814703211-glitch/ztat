@@ -40,7 +40,7 @@ final class ShelfFilePromiseTransfer {
         self.storeDirectory = storeDirectory
         self.maximumFiles = maximumFiles
         self.completion = completion
-        queue.name = "com.vorssaint.utils.shelf-file-promises"
+        queue.name = "dev.ztat.toolbox.utils.shelf-file-promises"
         queue.qualityOfService = .utility
         queue.maxConcurrentOperationCount = 1
     }

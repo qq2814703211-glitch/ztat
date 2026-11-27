@@ -4,7 +4,7 @@ import Darwin
 import OSLog
 
 private let hidTemperatureLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "hardware-temperature"
 )
 

@@ -37,8 +37,8 @@ Usage: ./scripts/build.sh [--dev | --release] [--install] [--open]
 Options:
   --dev       Build debug configuration (bundle ID dev.ztat.app.dev, name "ztat (Dev)")
   --release   Build optimized release configuration (default)
-  --install   Copy dist/ztat.app into /Applications/ztat.app
-  --open      Launch dist/ztat.app after packaging
+  --install   Install cleanly into /Applications/ztat.app and unregister duplicate dist copy
+  --open      Launch the installed app (when --install) or dist/ztat.app
 EOF
             exit 0
             ;;
@@ -127,6 +127,22 @@ for bundle in "$BIN_PATH"/*.bundle(N); do
     ditto "$bundle" "$CONTENTS/Resources/$(basename "$bundle")"
 done
 
+# Copy ZtatIsland vendored MediaRemoteAdapter.framework, NowPlayingTestClient, and .lproj tables
+ISLAND_VENDOR="$ROOT/Packages/ZtatIsland/Vendor"
+if [[ -d "$ISLAND_VENDOR/MediaRemoteAdapter.framework" ]]; then
+    ditto "$ISLAND_VENDOR/MediaRemoteAdapter.framework" "$CONTENTS/Resources/MediaRemoteAdapter.framework"
+fi
+if [[ -f "$ISLAND_VENDOR/NowPlayingTestClient" ]]; then
+    cp "$ISLAND_VENDOR/NowPlayingTestClient" "$CONTENTS/Helpers/NowPlayingTestClient"
+    chmod +x "$CONTENTS/Helpers/NowPlayingTestClient"
+fi
+ISLAND_LOC_DIR="$ROOT/Packages/ZtatIsland/Sources/ZtatIsland/Resources/Localizations"
+if [[ -d "$ISLAND_LOC_DIR" ]]; then
+    for lproj in "$ISLAND_LOC_DIR"/*.lproj(N); do
+        ditto "$lproj" "$CONTENTS/Resources/$(basename "$lproj")"
+    done
+fi
+
 if [[ -n "$AIRPODS_HELPER" ]]; then
     cp "$AIRPODS_HELPER" "$CONTENTS/Helpers/StatusTrioAirPodsHelper"
     chmod +x "$CONTENTS/Helpers/StatusTrioAirPodsHelper"
@@ -168,8 +184,43 @@ stamp_binary "$CONTENTS/MacOS/ztat-hold"
 stamp_binary "$DIST_DIR/ztat-hold"
 [[ -x "$CONTENTS/Helpers/StatusTrioAirPodsHelper" ]] && stamp_binary "$CONTENTS/Helpers/StatusTrioAirPodsHelper"
 
-echo "▸ [6/6] Ad-hoc signing & verifying bundle..."
-SIGN_ID="${ZTAT_CODESIGN_IDENTITY:--}"
+# Prefer an explicit ZTAT_CODESIGN_IDENTITY or an existing valid local code-signing identity (resolved
+# to its unambiguous 40-char SHA-1 hash) so macOS TCC permissions survive rebuilds cleanly.
+SIGN_ID="${ZTAT_CODESIGN_IDENTITY:-}"
+SIGN_LABEL="$SIGN_ID"
+resolve_signing_identity() {
+    local pattern="$1"
+    security find-identity -v -p codesigning 2>/dev/null \
+        | awk -v pat="$pattern" 'index($0, pat) > 0 { print $2; exit }'
+}
+if [[ -z "$SIGN_ID" ]]; then
+    if [[ -z "$(resolve_signing_identity '"Ztat Code Signing"')" ]] \
+       && security find-certificate -c "Ztat Code Signing" ~/Library/Keychains/login.keychain-db >/dev/null 2>&1; then
+        tmp_cer="$(mktemp "${TMPDIR:-/tmp}/ztat-cert.XXXXXX.cer")"
+        security find-certificate -c "Ztat Code Signing" -p ~/Library/Keychains/login.keychain-db > "$tmp_cer" 2>/dev/null || true
+        security add-trusted-cert -r trustRoot -p codeSign -k ~/Library/Keychains/login.keychain-db "$tmp_cer" 2>/dev/null || true
+        rm -f "$tmp_cer"
+    fi
+
+    for candidate in '"Ztat Code Signing"' '"ztat Local Signing"' '"Apple Development:' '"Developer ID Application:'; do
+        HASH="$(resolve_signing_identity "$candidate" || true)"
+        if [[ -n "$HASH" ]]; then
+            SIGN_ID="$HASH"
+            SIGN_LABEL="$(security find-identity -v -p codesigning 2>/dev/null | awk -v h="$HASH" '$2 == h { sub(/^[^"]*"/, ""); sub(/"$/, ""); print; exit }')"
+            break
+        fi
+    done
+
+    if [[ -z "$SIGN_ID" ]]; then
+        SIGN_ID="-"
+        SIGN_LABEL="ad-hoc (-)"
+    fi
+fi
+
+echo "▸ [6/6] Signing ($SIGN_LABEL) & verifying bundle..."
+if [[ -d "$CONTENTS/Resources/MediaRemoteAdapter.framework" ]]; then
+    codesign --force --sign "$SIGN_ID" --timestamp=none "$CONTENTS/Resources/MediaRemoteAdapter.framework"
+fi
 for dylib in "$CONTENTS/Frameworks"/*.dylib(N); do
     codesign --force --sign "$SIGN_ID" --timestamp=none "$dylib"
 done
@@ -178,21 +229,72 @@ for helper in "$CONTENTS/Helpers"/*(N); do
 done
 codesign --force --sign "$SIGN_ID" --timestamp=none "$CONTENTS/MacOS/ztat-hold"
 codesign --force --sign "$SIGN_ID" --timestamp=none "$DIST_DIR/ztat-hold"
-codesign --force --deep --sign "$SIGN_ID" --timestamp=none "$APP_BUNDLE"
+codesign --force --sign "$SIGN_ID" --identifier "$BUNDLE_ID" --timestamp=none "$APP_BUNDLE"
 codesign --verify --deep --strict "$APP_BUNDLE"
+if [[ -d "$CONTENTS/Resources/MediaRemoteAdapter.framework" ]]; then
+    codesign --verify --strict "$CONTENTS/Resources/MediaRemoteAdapter.framework"
+fi
+DR_OUTPUT="$(codesign -d -r- "$APP_BUNDLE" 2>&1 || true)"
+if [[ "$SIGN_ID" != "-" ]] && ! echo "$DR_OUTPUT" | grep -q "certificate leaf"; then
+    echo "Error: expected certificate-pinned designated requirement for stable TCC, got:" >&2
+    echo "$DR_OUTPUT" >&2
+    exit 1
+fi
 
-echo "✓ Built successfully:"
-echo "  App : $APP_BUNDLE"
-echo "  CLI : $DIST_DIR/ztat-hold"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+FINAL_APP="$APP_BUNDLE"
 
 if [[ "$INSTALL_MODE" == "1" ]]; then
     DEST_APP="/Applications/$(basename "$APP_BUNDLE")"
-    echo "▸ Installing to $DEST_APP..."
-    rm -rf "$DEST_APP"
-    ditto "$APP_BUNDLE" "$DEST_APP"
-    echo "✓ Installed $DEST_APP"
+    STAGING_APP="${DEST_APP}.staging"
+    OLD_APP="${DEST_APP}.old"
+
+    echo "▸ Stopping running ztat instances targeting $DEST_APP..."
+    TARGET_PIDS=("${(@f)$(pgrep -f "$DEST_APP/Contents/MacOS/ztat" 2>/dev/null || true)}")
+    for pid in "${TARGET_PIDS[@]}"; do
+        [[ -n "$pid" ]] && kill -TERM "$pid" 2>/dev/null || true
+    done
+    # Poll cleanly up to 5 seconds for graceful teardown before forcing exit
+    for _ in {1..50}; do
+        pgrep -f "$DEST_APP/Contents/MacOS/ztat" >/dev/null 2>&1 || break
+        sleep 0.1
+    done
+    if pgrep -f "$DEST_APP/Contents/MacOS/ztat" >/dev/null 2>&1; then
+        pkill -KILL -f "$DEST_APP/Contents/MacOS/ztat" 2>/dev/null || true
+        sleep 0.2
+    fi
+
+    echo "▸ Installing atomically to $DEST_APP..."
+    rm -rf "$STAGING_APP" "$OLD_APP"
+    ditto "$APP_BUNDLE" "$STAGING_APP"
+    codesign --verify --deep --strict "$STAGING_APP"
+    if [[ -d "$STAGING_APP/Contents/Resources/MediaRemoteAdapter.framework" ]]; then
+        codesign --verify --strict "$STAGING_APP/Contents/Resources/MediaRemoteAdapter.framework"
+    fi
+    if [[ -d "$DEST_APP" ]]; then
+        mv "$DEST_APP" "$OLD_APP"
+    fi
+    mv "$STAGING_APP" "$DEST_APP"
+    rm -rf "$OLD_APP"
+
+    # CRITICAL: Unregister & remove dist/.app when installing into /Applications so LaunchServices & macOS TCC
+    # never have two competing dev.ztat.app bundles on disk.
+    [[ -x "$LSREGISTER" ]] && "$LSREGISTER" -u "$APP_BUNDLE" >/dev/null 2>&1 || true
+    rm -rf "$APP_BUNDLE"
+    [[ -x "$LSREGISTER" ]] && "$LSREGISTER" -f "$DEST_APP" >/dev/null 2>&1 || true
+    FINAL_APP="$DEST_APP"
+    echo "✓ Installed $DEST_APP (sole LaunchServices bundle)"
+fi
+
+echo "✓ Built successfully:"
+echo "  App : $FINAL_APP"
+echo "  CLI : $DIST_DIR/ztat-hold"
+echo "  Sign: $SIGN_LABEL ($SIGN_ID)"
+echo "  DR  : $(echo "$DR_OUTPUT" | grep -E 'designated =>' | head -n 1)"
+if [[ "$SIGN_ID" == "-" ]]; then
+    echo "  Note: Ad-hoc signed (-). After rebuilding, if macOS TCC ignores an old toggle, click '重新开始' in ztat 设置 → 权限与隐私."
 fi
 
 if [[ "$OPEN_APP" == "1" ]]; then
-    open "$APP_BUNDLE"
+    open "$FINAL_APP"
 fi

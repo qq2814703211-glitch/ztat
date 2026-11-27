@@ -29,3 +29,22 @@ It integrates and builds upon the following open-source projects, with full resp
 - **Repository**: https://github.com/budwk/budhold
 - **License Note**: Upstream repository carries no open-source license file (`Copyright © 2026 BudWK. All rights reserved.`).
 - **Implementation**: **No source code or assets from `budhold` are copied into `ztat`.** `Packages/ZtatPowerGuard` (including the `ztat-hold` CLI target) is an original clean-room GPL-3.0-or-later implementation inspired by the clamshell keep-awake / physical 0% blackout / framebuffer guard workflow, built on public macOS IOKit/CoreGraphics APIs and Vorssaint's GPL-3.0 keep-awake foundation.
+
+## 5. Atoll (`Ebullioscopic/Atoll`)
+- **Repository**: https://github.com/Ebullioscopic/Atoll
+- **License**: GNU General Public License v3.0 (`Copyright (C) 2024-2026 Atoll Contributors`; includes software derived from `boring.notch` GPL-3.0 and `rtaudio` audio DSP)
+- **Modifications in `ztat`**: Ported to pure Swift Package Manager (`Packages/ZtatIsland`) for Xcode-free Apple CLT compilation, replacing Vorssaint's Dynamic Island implementation (`notch*`). Rebranded for `ztat`, isolated to `dev.ztat.app.island` UserDefaults suite, embedded natively into `ztat`'s unified Settings & Hub without a separate menu bar icon or Sparkle updater, bridged Keep-Awake controls to `ZtatPowerGuardRegistry`, and optimized idle observers/subprocesses/teardown.
+- **Included / Resolved Third-Party Packages**:
+  - `Defaults` & `KeyboardShortcuts` (Sindre Sorhus): MIT License.
+  - `SwiftTerm` (Miguel de Icaza): MIT License.
+  - `lottie-ios` (Airbnb): Apache License 2.0.
+  - `AtollExtensionKit` (Ebullioscopic): Upstream open-source license.
+  - `FingerprintScan.json` animation by Eddy Gann: Lottie Simple License.
+
+## 6. Pearcleaner Feature Inspiration (`alienator88/Pearcleaner`)
+- **Repository**: https://github.com/alienator88/Pearcleaner
+- **License Note**: Upstream v5.x is licensed under Apache 2.0 with Commons Clause v1.0, which is incompatible with `GPL-3.0-or-later`.
+- **Implementation**: **No source code or assets from `Pearcleaner` are copied into `ztat`.** `Packages/ZtatCleaner` is an original clean-room GPL-3.0-or-later implementation inspired by Pearcleaner's macOS app uninstaller, orphan finder, Mach-O universal binary slimmer, translation pruner, developer environment cleaner, PKG/receipts, plugins, launch services, file search, delete history, and trash-sentinel workflows, built strictly on public macOS frameworks (`AppKit`, `SwiftUI`, `CoreServices`, `Security`, `SQLite3`).
+
+## 7. Vitals Telemetry & Activity Monitor Feature Inspiration
+- **Implementation**: **No proprietary code or assets are copied.** `Packages/ZtatStats/Sources/ZtatStatsHost/Vitals*.swift`, `ZtatTaskManagerView.swift`, and `Sources/ZtatApp/ZtatTaskManagerWindow.swift` are original clean-room GPL-3.0-or-later implementations built on public macOS / Darwin / IOKit / Mach telemetry APIs.

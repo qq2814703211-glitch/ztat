@@ -41,9 +41,9 @@ enum AppFeature: String, CaseIterable {
 enum FeatureGroup: String, CaseIterable {
     case windowsDock, mouseKeyboard, clipboardFiles, sound, energyDisplay, tools, dynamicIsland, monitor
 
-    // ZTAT-PATCH: Hide Vorssaint monitor group (replaced by ZtatStats).
+    // ZTAT-PATCH: Hide Vorssaint monitor (replaced by ZtatStats) and dynamicIsland (replaced by ZtatIsland).
     static var ztatVisibleCases: [FeatureGroup] {
-        allCases.filter { $0 != .monitor }
+        allCases.filter { $0 != .monitor && $0 != .dynamicIsland }
     }
 }
 
@@ -222,12 +222,17 @@ extension AppFeature {
 
     var availabilityKey: String { DefaultsKey.featureAvailable(rawValue) }
 
-    // ZTAT-PATCH: Exclude overlapping monitor/fanControl (replaced by ZtatStats) and keepAwake (replaced by ZtatPowerGuard).
+    // ZTAT-PATCH: Exclude overlapping monitor/fanControl (ZtatStats), keepAwake (ZtatPowerGuard),
+    // uninstaller (replaced natively by ZtatCleaner), and Vorssaint Dynamic Island + all 12 extensions (replaced natively by ZtatIsland / Atoll).
     var isExcludedInZtat: Bool {
         switch self {
         case .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork,
              .monitorDisk, .monitorPower, .connectedDevices, .fanControl,
-             .keepAwake:
+             .keepAwake, .uninstaller,
+             .notch, .notchCalendar, .notchNotifications, .notchGestures,
+             .notchTimer, .notchAccessories, .notchLyrics, .notchQueue,
+             .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
+             .notchMascot:
             return true
         default:
             return false

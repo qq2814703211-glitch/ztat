@@ -55,6 +55,7 @@ struct AppIconRingView: View {
     /// the section (like the middle-icon group); kept when the ring group sits
     /// among the other icon groups.
     var showsRingContentTitle: Bool = true
+    var isEmbeddedInUnifiedSettings: Bool = false
     @EnvironmentObject private var localization: Localization
 
     /// The battery presence this page draws with. In a development build the
@@ -941,17 +942,19 @@ struct AppIconRingView: View {
                 isOn: $store.showsMenuBarChargingEffect
             )
 
-            SettingsDivider()
+            if !isEmbeddedInUnifiedSettings {
+                SettingsDivider()
 
-            SettingsToggleRow(
-                symbol: "dock.rectangle",
-                tint: .green,
-                title: localization.string(.settingsBatteryDockChargingEffect),
-                subtitle: localization.string(
-                    .settingsBatteryDockChargingEffectDescription
-                ),
-                isOn: $store.showsDockChargingEffect
-            )
+                SettingsToggleRow(
+                    symbol: "dock.rectangle",
+                    tint: .green,
+                    title: localization.string(.settingsBatteryDockChargingEffect),
+                    subtitle: localization.string(
+                        .settingsBatteryDockChargingEffectDescription
+                    ),
+                    isOn: $store.showsDockChargingEffect
+                )
+            }
 
             SettingsDivider()
 

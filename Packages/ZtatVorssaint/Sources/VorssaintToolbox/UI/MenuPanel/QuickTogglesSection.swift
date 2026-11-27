@@ -2,6 +2,7 @@
 // Copyright (C) 2026 Vorssaint
 
 import AppKit
+import ZtatCore
 import SwiftUI
 
 /// The quick toggles tab of the menu panel: one-click system actions, each an
@@ -18,7 +19,7 @@ struct QuickTogglesSection: View {
                      supportsEditing: true,
                      resetAction: QuickTogglesList.resetPanelDefaults) { editing in
             QuickTogglesList(editing: editing, draggingItem: $draggingItem) {
-                appDelegate()?.closePopover()
+                ZtatHostBridge.shared.dismissHubPanel()
             }
             // Actions here activate other apps (the Finder restarting, System
             // Events, the Trash confirmation), which would dismiss the panel

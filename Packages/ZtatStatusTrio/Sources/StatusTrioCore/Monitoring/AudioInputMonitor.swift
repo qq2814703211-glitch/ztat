@@ -976,7 +976,7 @@ private struct AudioInputCommandResult: Sendable {
 /// The observation reference is only accessed on `queue`; this is the `@unchecked Sendable` invariant.
 private final class AudioInputWorker: @unchecked Sendable {
   private let hardware: any AudioInputHardware
-  private let queue = DispatchQueue(label: "com.status-trio.audio-input-io", qos: .utility)
+  private let queue = DispatchQueue(label: "dev.ztat.status.audio-input-io", qos: .utility)
   private var observation: (any AudioInputObservation)?
 
   init(hardware: any AudioInputHardware) {

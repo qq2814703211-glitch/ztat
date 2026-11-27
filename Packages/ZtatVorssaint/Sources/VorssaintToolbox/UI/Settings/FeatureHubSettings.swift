@@ -89,7 +89,10 @@ struct FeatureHubSettings: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background { FeatureHubScrollAnchor() }
                 if tab == .features {
-                    dynamicIslandCard
+                    // ZTAT-PATCH: Vorssaint dynamicIslandCard replaced by native ZtatIsland (Atoll).
+                    if FeatureGroup.ztatVisibleCases.contains(.dynamicIsland) {
+                        dynamicIslandCard
+                    }
                     presetsCard
                     // ZTAT-PATCH: Only display non-overlapping feature groups (monitor replaced by ZtatStats).
                     ForEach(FeatureGroup.ztatVisibleCases.filter { $0 != .dynamicIsland }, id: \.self) { group in
@@ -1010,6 +1013,11 @@ private struct PermissionPortalRow: View {
                 HStack(spacing: 8) {
                     if status != .granted, hasRequestFlow {
                         Button(hub.requestButton) { request() }
+                    }
+                    if status != .granted, (permission == .accessibility || permission == .screenRecording) {
+                        Button(FeatureStrings.permissionGuide(l10n.language).startOver) {
+                            Permissions.shared.startOver(permission == .accessibility ? .accessibility : .screenRecording)
+                        }
                     }
                     Button(hub.openSystemSettings) { openSystemSettings() }
                 }

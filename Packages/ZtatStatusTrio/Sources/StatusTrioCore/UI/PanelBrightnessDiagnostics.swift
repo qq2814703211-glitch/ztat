@@ -19,7 +19,7 @@ enum PanelBrightnessDiagnostics {
 
 extension PanelBrightnessDiagnostics {
     private static let logger = Logger(
-        subsystem: "com.lingsmbp.StatusTrio",
+        subsystem: "dev.ztat.app",
         category: "BrightnessDiagnostics"
     )
 

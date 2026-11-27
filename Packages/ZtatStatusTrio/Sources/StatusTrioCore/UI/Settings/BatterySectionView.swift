@@ -1,4 +1,5 @@
 import SwiftUI
+import ZtatCore
 
 /// Settings for how the battery indicator is drawn in the status icon.
 struct BatterySectionView: View {
@@ -12,6 +13,7 @@ struct BatterySectionView: View {
     var subtopic: SettingsSubtopic? = nil
     @EnvironmentObject private var localization: Localization
     @ObservedObject private var helper: PrivilegedHelperManager = .shared
+    @ObservedObject private var powerGuardRegistry: ZtatPowerGuardRegistry = .shared
 
 
     var body: some View {
@@ -38,10 +40,8 @@ struct BatterySectionView: View {
         }
         panelVisibilityGroup
         chargeManagementGroup
-        // ZTAT-PATCH: StatusTrioPowerHelper is omitted in ztat; hide helper-only power modes warning when unavailable.
-        if helper.isAvailable {
-            powerModesGroup
-        }
+        // ZTAT-PATCH: Power Modes are powered natively by ZtatPowerGuard's least-privilege pmset engine.
+        powerModesGroup
         powerFlowGroup
         BatteryStatusColorsGroup(
             store: store,
@@ -312,35 +312,34 @@ struct BatterySectionView: View {
             )
             .disabled(!helper.isAvailable)
 
-            // Native approval and verified helper access can differ. Keep the
-            // pane accessible; only warn when approval is pending and access
-            // is unverified.
-            if helper.isAvailable {
-                Button {
-                    helper.openLoginItemsSettings()
-                } label: {
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: needsApproval
-                            ? "exclamationmark.triangle.fill"
-                            : "info.circle")
-                            .foregroundStyle(needsApproval ? Color.orange : Color.secondary)
-                        Text(localization.string(
-                            needsApproval
-                                ? .lowPowerModeRequiresApproval
-                                : (helper.isReady ? .lowPowerModeOpenLoginItems : .lowPowerModeApprovalHint)
-                        ))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+            // ZTAT-PATCH: Surface unified passwordless pmset authorization status (covers Low/High Power Mode + Auto-LPM + Clamshell Lock).
+            HStack(alignment: .center, spacing: 8) {
+                Image(systemName: powerGuardRegistry.snapshot.isPasswordlessSudoReady ? "checkmark.shield.fill" : "lock.shield")
+                    .foregroundStyle(powerGuardRegistry.snapshot.isPasswordlessSudoReady ? Color.green : Color.secondary)
+                Text(
+                    powerGuardRegistry.snapshot.isPasswordlessSudoReady
+                        ? ZtatL10n.tr(
+                            "统一免密 pmset 规则已就绪：低/高能耗模式及低电量自动省电均免密即时生效。",
+                            "Passwordless pmset rule ready: Low/High Power Mode and Auto Low Power switch silently."
+                        )
+                        : ZtatL10n.tr(
+                            "未配置免密规则：手动切换低/高能耗模式将提示系统密码；配置后可免密切换并启用低电量自动省电。",
+                            "Passwordless rule not installed: manual toggles prompt for password; install for silent switching & Auto Low Power."
+                        )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 8)
+                if !powerGuardRegistry.snapshot.isPasswordlessSudoReady {
+                    Button(ZtatL10n.tr("一键配置免密", "Install Rule")) {
+                        Task { _ = await ZtatPowerGuardRegistry.shared.installPasswordlessSudoers() }
                     }
-                    .contentShape(Rectangle())
+                    .controlSize(.small)
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(localization.string(.lowPowerModeOpenLoginItems))
-                .padding(.horizontal, SettingsMetrics.rowPaddingH)
-                .padding(.bottom, 6)
             }
+            .padding(.horizontal, SettingsMetrics.rowPaddingH)
+            .padding(.bottom, 6)
 
             if helper.didFailLastOperation {
                 HStack(alignment: .firstTextBaseline, spacing: 6) {

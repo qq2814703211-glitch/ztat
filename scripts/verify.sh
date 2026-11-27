@@ -55,9 +55,41 @@ echo "=== 5. CLI Hardware Probe Smoke Test (ztat-hold status) ==="
 echo ""
 echo "=== 6. Headless Launch & Clean Termination Smoke Test ==="
 SMOKE_LOG="$(mktemp "${TMPDIR:-/tmp}/ztat-smoke.XXXXXX.log")"
-trap 'rm -f "$SMOKE_LOG"' EXIT
-"$APP_BIN" >"$SMOKE_LOG" 2>&1 &
-APP_PID=$!
+# The app enforces a single instance (flock). If a ztat is already running, the smoke
+# launch would exit immediately by design, so pause the running copy and restore it afterwards.
+RESTORE_APP=""
+RUNNING_PID="$(pgrep -x ztat | head -n 1 || true)"
+if [[ -n "$RUNNING_PID" ]]; then
+    RESTORE_APP="$(ps -o comm= -p "$RUNNING_PID" | sed -E 's#(\.app)/Contents/MacOS/.*#\1#')"
+    echo "Pausing running ztat (PID $RUNNING_PID) for the smoke test..."
+    kill -TERM "$RUNNING_PID" 2>/dev/null || true
+    for _ in {1..50}; do kill -0 "$RUNNING_PID" 2>/dev/null || break; sleep 0.1; done
+fi
+restore_running_app() {
+    rm -f "$SMOKE_LOG"
+    # Keep LaunchServices pointing at the installed copy, not the dist build we just opened.
+    if [[ -d /Applications/ztat.app ]]; then
+        /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -u "$ROOT/dist/ztat.app" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$RESTORE_APP" && -d "$RESTORE_APP" ]]; then
+        open "$RESTORE_APP" || true
+    fi
+}
+trap restore_running_app EXIT
+# Launch through LaunchServices so the app is its own TCC "responsible process"
+# (a raw shell exec makes TCC attribute privacy requests to the parent shell/terminal).
+open -g -n --stdout "$SMOKE_LOG" --stderr "$SMOKE_LOG" "$ROOT/dist/ztat.app"
+APP_PID=""
+for _ in {1..50}; do
+    APP_PID="$(pgrep -f "^$APP_BIN\$" | head -n 1 || true)"
+    [[ -n "$APP_PID" ]] && break
+    sleep 0.1
+done
+if [[ -z "$APP_PID" ]]; then
+    echo "Error: ztat failed to launch during smoke test!" >&2
+    cat "$SMOKE_LOG" >&2
+    exit 1
+fi
 sleep 3
 if ! kill -0 "$APP_PID" 2>/dev/null; then
     echo "Error: ztat exited prematurely during smoke test!" >&2
@@ -66,7 +98,12 @@ if ! kill -0 "$APP_PID" 2>/dev/null; then
 fi
 echo "✓ ztat stayed alive cleanly (PID $APP_PID); sending SIGTERM..."
 kill -TERM "$APP_PID"
-wait "$APP_PID" 2>/dev/null || true
+for _ in {1..50}; do kill -0 "$APP_PID" 2>/dev/null || break; sleep 0.1; done
+if kill -0 "$APP_PID" 2>/dev/null; then
+    echo "Error: ztat did not terminate within 5s of SIGTERM!" >&2
+    kill -KILL "$APP_PID" 2>/dev/null || true
+    exit 1
+fi
 if [[ -s "$SMOKE_LOG" ]]; then
     echo "Runtime log excerpt:"
     head -n 30 "$SMOKE_LOG"

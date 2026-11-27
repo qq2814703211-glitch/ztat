@@ -79,7 +79,9 @@ public class DB {
     private let queue = DispatchQueue(label: "dev.ztat.stats.db", qos: .utility)
     private let historyQueue = DispatchQueue(label: "dev.ztat.stats.db.history", qos: .utility)
     private let cacheFileURL: URL
+    private let historyFileURL: URL
     private let debounceInterval: TimeInterval = 15
+    private let historyDebounceInterval: TimeInterval = 60
     private let historyRetention: TimeInterval = 24 * 60 * 60
 
     private var serializedValues: [String: String] = [:]
@@ -87,6 +89,8 @@ public class DB {
     private var pendingSaveWorkItem: DispatchWorkItem? = nil
 
     private var historyBuckets: [String: [Date: HistoryBucket]] = [:]
+    private var isHistoryDirty: Bool = false
+    private var pendingHistorySaveWorkItem: DispatchWorkItem? = nil
     private var lastHistoryCleanup: Date? = nil
 
     public var _writeTS: [String: Date] = [:]
@@ -103,11 +107,14 @@ public class DB {
 
     init() {
         self.cacheFileURL = ZtatBrand.statsCacheDirectory.appendingPathComponent("stats-cache.json")
+        self.historyFileURL = ZtatBrand.statsCacheDirectory.appendingPathComponent("stats-history.json")
         self.loadFromDisk()
+        self.loadHistoryFromDisk()
     }
 
     deinit {
         self.pendingSaveWorkItem?.cancel()
+        self.pendingHistorySaveWorkItem?.cancel()
     }
 
     private func loadFromDisk() {
@@ -116,6 +123,57 @@ public class DB {
             return
         }
         self.serializedValues = dict
+    }
+
+    private func loadHistoryFromDisk() {
+        guard let data = try? Data(contentsOf: self.historyFileURL),
+              let decoded = try? JSONDecoder().decode([String: [HistoryBucket]].self, from: data) else {
+            return
+        }
+        let cutoff = self.historyMinute(Date().addingTimeInterval(-self.historyRetention))
+        var loaded: [String: [Date: HistoryBucket]] = [:]
+        for (key, list) in decoded {
+            var map: [Date: HistoryBucket] = [:]
+            for bucket in list where bucket.isValid && bucket.timestamp >= cutoff {
+                map[bucket.timestamp] = bucket
+            }
+            if !map.isEmpty {
+                loaded[key] = map
+            }
+        }
+        self.historyBuckets = loaded
+    }
+
+    private func scheduleDebouncedHistoryPersistLocked() {
+        self.isHistoryDirty = true
+        self.pendingHistorySaveWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.persistHistoryLocked()
+        }
+        self.pendingHistorySaveWorkItem = item
+        self.historyQueue.asyncAfter(deadline: .now() + self.historyDebounceInterval, execute: item)
+    }
+
+    private func persistHistoryLocked() {
+        self.pendingHistorySaveWorkItem?.cancel()
+        self.pendingHistorySaveWorkItem = nil
+        guard self.isHistoryDirty else { return }
+        self.isHistoryDirty = false
+
+        let cutoff = self.historyMinute(Date().addingTimeInterval(-self.historyRetention))
+        var payload: [String: [HistoryBucket]] = [:]
+        for (key, map) in self.historyBuckets {
+            let valid = map.values.filter { $0.isValid && $0.timestamp >= cutoff }
+            if !valid.isEmpty {
+                payload[key] = valid
+            }
+        }
+        guard let data = try? JSONEncoder().encode(payload) else { return }
+        try? FileManager.default.createDirectory(
+            at: self.historyFileURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try? data.write(to: self.historyFileURL, options: .atomic)
     }
 
     private func scheduleDebouncedPersistLocked() {
@@ -226,6 +284,7 @@ public class DB {
             }
 
             self.cleanupHistoryIfNeeded()
+            self.scheduleDebouncedHistoryPersistLocked()
         }
     }
 
@@ -255,6 +314,9 @@ public class DB {
     public func flush() {
         self.queue.sync {
             self.persistLocked()
+        }
+        self.historyQueue.sync {
+            self.persistHistoryLocked()
         }
     }
 

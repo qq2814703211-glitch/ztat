@@ -129,7 +129,7 @@ final class BluetoothListeningModeController: ObservableObject {
     /// notifications does not fan out; the block body only hops to MainActor, so
     /// the queue itself is not where the presentation is mutated.
     private let listenerQueue = DispatchQueue(
-        label: "com.lingsmbp.StatusTrio.bluetooth.listeningMode.listener"
+        label: "dev.ztat.app.bluetooth.listeningMode.listener"
     )
 
     /// The active subscription per endpoint we are listening on. Keeping the exact

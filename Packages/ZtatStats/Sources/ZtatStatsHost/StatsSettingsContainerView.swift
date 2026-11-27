@@ -3,8 +3,8 @@
 //  StatsSettingsContainerView.swift
 //  ZtatStatsHost
 //
-//  ZTAT-PATCH: Native SwiftUI overview + embedded Stats module/dashboard/settings host
-//  inside ztat's single Unified Settings window (eliminates standalone Stats SettingsWindow).
+//  ZTAT-PATCH: Native SwiftUI overview, Dashboard, Global/Stress settings, and live-refreshing
+//  module settings host inside ztat's single Unified Settings window.
 //
 
 import AppKit
@@ -12,10 +12,11 @@ import StatsKit
 import SwiftUI
 import ZtatCore
 
-/// Overview & global toggles view hosted inside ztat's unified Settings window ("性能监控 → 总览与开关").
+/// Overview & quick module toggles hosted inside ztat's unified Settings window ("性能监控 → 总览与开关").
 @MainActor
 public struct StatsSettingsContainerView: View {
     @ObservedObject private var host: ZtatStatsHost
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
     private let onSelectTarget: ((String) -> Void)?
     @State private var temperatureUnit: String
     @State private var keepMenuBarPosition: Bool
@@ -41,6 +42,7 @@ public struct StatsSettingsContainerView: View {
     }
 
     public var body: some View {
+        let _ = l10n.revision
         Form {
             Section {
                 HStack(spacing: 12) {
@@ -70,7 +72,7 @@ public struct StatsSettingsContainerView: View {
                 }
             }
 
-            Section(ZtatL10n.tr("菜单栏模块（点击“配置”在当前窗口展开详细样式）", "Menu Bar Modules")) {
+            Section(ZtatL10n.tr("菜单栏模块（点击“配置”展开详细样式）", "Menu Bar Modules")) {
                 ForEach(self.host.moduleSummaries) { item in
                     HStack(spacing: 10) {
                         Image(systemName: item.symbolName)
@@ -107,7 +109,7 @@ public struct StatsSettingsContainerView: View {
                 }
             }
 
-            Section(ZtatL10n.tr("布局与显示", "Layout & Display")) {
+            Section(ZtatL10n.tr("常用布局与显示", "Quick Layout & Display")) {
                 Toggle(
                     ZtatL10n.tr("合并为单个菜单栏项 (Combine modules)", "Combine modules into a single menu bar item"),
                     isOn: Binding(
@@ -145,8 +147,8 @@ public struct StatsSettingsContainerView: View {
             Section(ZtatL10n.tr("维护", "Maintenance")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(ZtatL10n.tr("重置性能监控偏好", "Reset Stats Preferences"))
-                        Text(ZtatL10n.tr("仅清空性能监控模块的配置，不影响 ztat 其余功能设置。", "Clears only Stats module preferences without affecting other ztat settings."))
+                        Text(ZtatL10n.tr("重置性能监控偏好", "Reset Monitor Preferences"))
+                        Text(ZtatL10n.tr("仅清空性能监控模块的配置，不影响 ztat 其余功能设置。", "Clears only Hardware Monitor preferences without affecting other ztat settings."))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -158,33 +160,38 @@ public struct StatsSettingsContainerView: View {
             }
         }
         .formStyle(.grouped)
-        .onAppear {
-            self.host.refreshSummaries()
-            self.temperatureUnit = Store.shared.string(key: "temperature_units", defaultValue: "system")
-            self.keepMenuBarPosition = Store.shared.bool(key: "keep_menubar_positions", defaultValue: false)
+        .onAppear { syncQuickPrefs() }
+        .onReceive(NotificationCenter.default.publisher(for: .ztatStatsStoreDidChange)) { _ in
+            syncQuickPrefs()
         }
         .alert(
-            ZtatL10n.tr("确认重置性能监控设置？", "Reset Stats Preferences?"),
+            ZtatL10n.tr("确认重置性能监控设置？", "Reset Monitor Preferences?"),
             isPresented: self.$showResetConfirmation
         ) {
             Button(ZtatL10n.tr("取消", "Cancel"), role: .cancel) {}
             Button(ZtatL10n.tr("重置", "Reset"), role: .destructive) {
                 self.host.resetAllStatsPreferences()
-                self.temperatureUnit = Store.shared.string(key: "temperature_units", defaultValue: "system")
-                self.keepMenuBarPosition = Store.shared.bool(key: "keep_menubar_positions", defaultValue: false)
+                syncQuickPrefs()
             }
         } message: {
-            Text(ZtatL10n.tr("这将关闭所有菜单栏监控项并恢复性能监控默认设置。", "All menu bar monitors will be disabled and Stats settings will be restored to defaults."))
+            Text(ZtatL10n.tr("这将关闭所有菜单栏监控项并恢复性能监控默认设置。", "All menu bar monitors will be disabled and Hardware Monitor settings will be restored to defaults."))
         }
+    }
+
+    private func syncQuickPrefs() {
+        self.host.refreshSummaries()
+        self.temperatureUnit = Store.shared.string(key: "temperature_units", defaultValue: "system")
+        self.keepMenuBarPosition = Store.shared.bool(key: "keep_menubar_positions", defaultValue: false)
     }
 }
 
-/// Seamless embedded Stats detail pane (module settings, hardware dashboard, or global/stress settings)
-/// rendered directly inside ztat's single Unified Settings window with a cohesive ztat header bar.
+/// Seamless embedded Stats detail pane inside ztat's single Unified Settings window.
+/// Renders pure native SwiftUI for Dashboard & Global/Stress settings, and live-rebuilding module panels.
 @MainActor
 public struct StatsEmbeddedTargetView: View {
     public let target: String
     @ObservedObject private var host: ZtatStatsHost
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
     @State private var isPreviewActive: Bool = false
 
     public init(target: String, host: ZtatStatsHost) {
@@ -196,13 +203,17 @@ public struct StatsEmbeddedTargetView: View {
         self.init(target: target, host: .shared)
     }
 
+    private var normalizedTarget: String {
+        ZtatStatsHost.normalizeSettingsTarget(self.target)
+    }
+
     private var summary: StatsModuleSummary? {
         self.host.moduleSummary(for: self.target)
     }
 
     private var headerTitle: String {
         if let summary { return summary.displayName }
-        switch ZtatStatsHost.normalizeSettingsTarget(self.target) {
+        switch normalizedTarget {
         case "dashboard": return ZtatL10n.tr("设备与硬件概览", "Hardware Dashboard")
         case "settings": return ZtatL10n.tr("监控全局与压力测试", "Monitor Settings & Stress Tests")
         default: return self.target
@@ -211,7 +222,7 @@ public struct StatsEmbeddedTargetView: View {
 
     private var headerSymbol: String {
         if let summary { return summary.symbolName }
-        switch ZtatStatsHost.normalizeSettingsTarget(self.target) {
+        switch normalizedTarget {
         case "dashboard": return "desktopcomputer"
         case "settings": return "slider.horizontal.3"
         default: return "gauge.with.dots.needle.67percent"
@@ -219,6 +230,7 @@ public struct StatsEmbeddedTargetView: View {
     }
 
     public var body: some View {
+        let _ = l10n.revision
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 Image(systemName: self.headerSymbol)
@@ -233,7 +245,7 @@ public struct StatsEmbeddedTargetView: View {
                         Text(summary.liveBadge)
                             .font(.caption.monospacedDigit())
                             .foregroundStyle(.secondary)
-                    } else if ZtatStatsHost.normalizeSettingsTarget(self.target) == "dashboard" {
+                    } else if normalizedTarget == "dashboard" {
                         Text(ZtatL10n.tr("实时硬件规格与运行时间", "Live hardware specifications & uptime"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -283,8 +295,16 @@ public struct StatsEmbeddedTargetView: View {
 
             Divider()
 
-            StatsEmbeddedNSViewHost(target: self.target, host: self.host)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if normalizedTarget == "dashboard" {
+                StatsNativeDashboardView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if normalizedTarget == "settings" {
+                StatsNativeGlobalSettingsView(host: self.host)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                StatsEmbeddedNSViewHost(target: self.target, revision: self.host.settingsRevision, host: self.host)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .onAppear {
             self.isPreviewActive = false
@@ -305,6 +325,7 @@ public struct StatsEmbeddedTargetView: View {
 
 private final class StatsEmbeddedHostContainerView: NSView {
     private var currentTarget: String?
+    private var currentRevision: Int = -1
     private weak var hostedView: NSView?
 
     override func mouseUp(with event: NSEvent) {
@@ -313,9 +334,10 @@ private final class StatsEmbeddedHostContainerView: NSView {
     }
 
     @MainActor
-    func display(target: String, host: ZtatStatsHost) {
-        guard self.currentTarget != target || self.hostedView?.superview !== self else { return }
+    func display(target: String, revision: Int, host: ZtatStatsHost) {
+        guard self.currentTarget != target || self.currentRevision != revision || self.hostedView?.superview !== self else { return }
         self.currentTarget = target
+        self.currentRevision = revision
 
         self.hostedView?.removeFromSuperview()
         self.subviews.forEach { $0.removeFromSuperview() }
@@ -337,15 +359,16 @@ private final class StatsEmbeddedHostContainerView: NSView {
 @MainActor
 private struct StatsEmbeddedNSViewHost: NSViewRepresentable {
     let target: String
+    let revision: Int
     let host: ZtatStatsHost
 
     func makeNSView(context: Context) -> StatsEmbeddedHostContainerView {
         let container = StatsEmbeddedHostContainerView(frame: .zero)
-        container.display(target: self.target, host: self.host)
+        container.display(target: self.target, revision: self.revision, host: self.host)
         return container
     }
 
     func updateNSView(_ nsView: StatsEmbeddedHostContainerView, context: Context) {
-        nsView.display(target: self.target, host: self.host)
+        nsView.display(target: self.target, revision: self.revision, host: self.host)
     }
 }

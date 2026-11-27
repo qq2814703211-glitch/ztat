@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Odinstalovat pomocnou aplikaci ventilátorů";
 "Approve in System Settings ▸ Login Items" = "Schválit v Nastavení systému ▸ Položky při přihlášení"; // gemma4:31b
 "Fan helper needs your approval" = "Pomocník pro ventilátor potřebuje váš souhlas"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Pro ovládání ventilátorů povolte Stats v Systemovém nastavení ▸ Položky při přihlášení."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Pro ovládání ventilátorů povolte ztat v Systemovém nastavení ▸ Položky při přihlášení."; // gemma4:31b
 "Open Login Items" = "Otevřít položky při přihlášení"; // gemma4:31b
 "Could not enable the fan helper" = "Nepodařilo se aktivovat pomocný nástroj pro ventilátor"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Otevřete Nastavení systému ▸ Položky při přihlášení, ujistěte se, že je Stats povoleno v pozadí, a poté zkuste znovu."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Otevřete Nastavení systému ▸ Položky při přihlášení, ujistěte se, že je ztat povoleno v pozadí, a poté zkuste znovu."; // gemma4:31b
 "Fan value" = "Hodnota ventilátoru";
 "Turn off fan" = "Vypnout ventilátor"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Chystáte se vypnout ventilátor. Toto není doporučený postup, který může poškodit váš Mac, jste si jistí, že to chcete udělat?"; // gemma4:31b

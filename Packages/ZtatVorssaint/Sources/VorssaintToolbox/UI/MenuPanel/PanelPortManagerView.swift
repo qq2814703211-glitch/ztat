@@ -53,7 +53,7 @@ struct PanelPortManagerView: View {
             Spacer()
             Button {
                 SettingsRouter.shared.page = .portManager
-                appDelegate()?.openSettingsWindow()
+                ZtatVorssaintHost.shared.requestOpenSettings()
             } label: {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))

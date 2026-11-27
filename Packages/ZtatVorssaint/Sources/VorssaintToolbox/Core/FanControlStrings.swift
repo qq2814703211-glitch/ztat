@@ -85,7 +85,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Fan %d",
         rpmFormat: "%d RPM",
         allowControl: "Allow fan control",
-        approvalCaption: "Allow Vorssaint in Login Items to use the protected fan controller.",
+        approvalCaption: "Allow ztat in Login Items to use the protected fan controller.",
         openSettings: "Open System Settings",
         noFans: "This Mac has no controllable fan.",
         unsupported: "Fan control is not available on this Mac.",
@@ -124,7 +124,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "Hottest CPU",
         hottestGPU: "Hottest GPU",
         gpuIdle: "GPU idle",
-        helperUnavailable: "The protected fan controller is unavailable. Allow Vorssaint in Login Items, then try again.",
+        helperUnavailable: "The protected fan controller is unavailable. Allow ztat in Login Items, then try again.",
         resumeAfterRestart: "Resume after restart or sleep"
     )
 
@@ -136,7 +136,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Ventoinha %d",
         rpmFormat: "%d RPM",
         allowControl: "Permitir controle",
-        approvalCaption: "Permita o Vorssaint nos Itens de Início para usar o controle protegido das ventoinhas.",
+        approvalCaption: "Permita o ztat nos Itens de Início para usar o controle protegido das ventoinhas.",
         openSettings: "Abrir Ajustes do Sistema",
         noFans: "Este Mac não tem ventoinha controlável.",
         unsupported: "O controle das ventoinhas não está disponível neste Mac.",
@@ -175,7 +175,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU mais quente",
         hottestGPU: "GPU mais quente",
         gpuIdle: "GPU em repouso",
-        helperUnavailable: "O controlador protegido das ventoinhas não está disponível. Permita o Vorssaint nos Itens de Início e tente novamente.",
+        helperUnavailable: "O controlador protegido das ventoinhas não está disponível. Permita o ztat nos Itens de Início e tente novamente.",
         resumeAfterRestart: "Retomar depois de reiniciar ou repousar"
     )
 
@@ -187,7 +187,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Fan %d",
         rpmFormat: "%d RPM",
         allowControl: "Fan denetimine izin ver",
-        approvalCaption: "Korumalı fan denetimini kullanmak için Giriş Öğeleri’nde Vorssaint’e izin verin.",
+        approvalCaption: "Korumalı fan denetimini kullanmak için Giriş Öğeleri’nde ztat’e izin verin.",
         openSettings: "Sistem Ayarları’nı Aç",
         noFans: "Bu Mac’te denetlenebilir fan yok.",
         unsupported: "Bu Mac’te fan denetimi kullanılamıyor.",
@@ -226,7 +226,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "En sıcak CPU",
         hottestGPU: "En sıcak GPU",
         gpuIdle: "GPU boşta",
-        helperUnavailable: "Korumalı fan denetleyicisi kullanılamıyor. Giriş Öğeleri’nde Vorssaint’e izin verip yeniden deneyin.",
+        helperUnavailable: "Korumalı fan denetleyicisi kullanılamıyor. Giriş Öğeleri’nde ztat’e izin verip yeniden deneyin.",
         resumeAfterRestart: "Yeniden başlatma veya uykudan sonra sürdür"
     )
 
@@ -238,7 +238,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Вентилятор %d",
         rpmFormat: "%d об/мин",
         allowControl: "Разрешить управление",
-        approvalCaption: "Разрешите Vorssaint в Объектах входа для защищённого управления вентиляторами.",
+        approvalCaption: "Разрешите ztat в Объектах входа для защищённого управления вентиляторами.",
         openSettings: "Открыть Системные настройки",
         noFans: "На этом Mac нет управляемого вентилятора.",
         unsupported: "Управление вентиляторами недоступно на этом Mac.",
@@ -277,7 +277,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "Самая горячая CPU",
         hottestGPU: "Самая горячая GPU",
         gpuIdle: "GPU в режиме ожидания",
-        helperUnavailable: "Защищённый контроллер вентиляторов недоступен. Разрешите Vorssaint в Объектах входа и повторите попытку.",
+        helperUnavailable: "Защищённый контроллер вентиляторов недоступен. Разрешите ztat в Объектах входа и повторите попытку.",
         resumeAfterRestart: "Возобновлять после перезагрузки или сна"
     )
 
@@ -289,7 +289,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Ventilador %d",
         rpmFormat: "%d RPM",
         allowControl: "Permitir control",
-        approvalCaption: "Permite Vorssaint en Ítems de inicio para usar el control protegido de los ventiladores.",
+        approvalCaption: "Permite ztat en Ítems de inicio para usar el control protegido de los ventiladores.",
         openSettings: "Abrir Ajustes del Sistema",
         noFans: "Este Mac no tiene ningún ventilador controlable.",
         unsupported: "El control de ventiladores no está disponible en este Mac.",
@@ -328,7 +328,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU más caliente",
         hottestGPU: "GPU más caliente",
         gpuIdle: "GPU en reposo",
-        helperUnavailable: "El controlador protegido de los ventiladores no está disponible. Permite Vorssaint en Ítems de inicio e inténtalo de nuevo.",
+        helperUnavailable: "El controlador protegido de los ventiladores no está disponible. Permite ztat en Ítems de inicio e inténtalo de nuevo.",
         resumeAfterRestart: "Reanudar tras reiniciar o salir del reposo"
     )
 
@@ -340,7 +340,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Ventilátor %d",
         rpmFormat: "%d ot./min",
         allowControl: "Povoliť ovládanie ventilátorov",
-        approvalCaption: "Povoľte Vorssaint v časti Položky a rozšírenia spúšťané pri prihlásení, aby mohol používať chránené ovládanie ventilátorov.",
+        approvalCaption: "Povoľte ztat v časti Položky a rozšírenia spúšťané pri prihlásení, aby mohol používať chránené ovládanie ventilátorov.",
         openSettings: "Otvoriť Systémové nastavenia",
         noFans: "Tento Mac nemá ovládateľný ventilátor.",
         unsupported: "Ovládanie ventilátorov nie je na tomto Macu dostupné.",
@@ -379,7 +379,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "Najteplejší CPU",
         hottestGPU: "Najteplejší GPU",
         gpuIdle: "GPU v pokoji",
-        helperUnavailable: "Chránený ovládač ventilátorov nie je dostupný. Povoľte Vorssaint v časti Položky a rozšírenia spúšťané pri prihlásení a skúste to znova.",
+        helperUnavailable: "Chránený ovládač ventilátorov nie je dostupný. Povoľte ztat v časti Položky a rozšírenia spúšťané pri prihlásení a skúste to znova.",
         resumeAfterRestart: "Pokračovať po reštarte alebo spánku"
     )
 
@@ -391,7 +391,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Lüfter %d",
         rpmFormat: "%d U/min",
         allowControl: "Lüftersteuerung erlauben",
-        approvalCaption: "Erlaube Vorssaint unter Anmeldeobjekte, um die geschützte Lüftersteuerung zu verwenden.",
+        approvalCaption: "Erlaube ztat unter Anmeldeobjekte, um die geschützte Lüftersteuerung zu verwenden.",
         openSettings: "Systemeinstellungen öffnen",
         noFans: "Dieser Mac hat keinen steuerbaren Lüfter.",
         unsupported: "Die Lüftersteuerung ist auf diesem Mac nicht verfügbar.",
@@ -430,7 +430,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "Heißeste CPU",
         hottestGPU: "Heißeste GPU",
         gpuIdle: "GPU im Leerlauf",
-        helperUnavailable: "Die geschützte Lüftersteuerung ist nicht verfügbar. Erlaube Vorssaint unter Anmeldeobjekte und versuche es erneut.",
+        helperUnavailable: "Die geschützte Lüftersteuerung ist nicht verfügbar. Erlaube ztat unter Anmeldeobjekte und versuche es erneut.",
         resumeAfterRestart: "Nach Neustart oder Ruhezustand fortsetzen"
     )
 
@@ -442,7 +442,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Ventilateur %d",
         rpmFormat: "%d tr/min",
         allowControl: "Autoriser le contrôle",
-        approvalCaption: "Autorisez Vorssaint dans Ouverture pour utiliser le contrôle protégé des ventilateurs.",
+        approvalCaption: "Autorisez ztat dans Ouverture pour utiliser le contrôle protégé des ventilateurs.",
         openSettings: "Ouvrir Réglages Système",
         noFans: "Ce Mac ne possède aucun ventilateur contrôlable.",
         unsupported: "Le contrôle des ventilateurs n’est pas disponible sur ce Mac.",
@@ -481,7 +481,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU le plus chaud",
         hottestGPU: "GPU le plus chaud",
         gpuIdle: "GPU au repos",
-        helperUnavailable: "Le contrôleur protégé des ventilateurs est indisponible. Autorisez Vorssaint dans Ouverture, puis réessayez.",
+        helperUnavailable: "Le contrôleur protégé des ventilateurs est indisponible. Autorisez ztat dans Ouverture, puis réessayez.",
         resumeAfterRestart: "Reprendre après un redémarrage ou la veille"
     )
 
@@ -493,7 +493,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Ventola %d",
         rpmFormat: "%d RPM",
         allowControl: "Consenti controllo",
-        approvalCaption: "Consenti Vorssaint in Elementi login per usare il controllo protetto delle ventole.",
+        approvalCaption: "Consenti ztat in Elementi login per usare il controllo protetto delle ventole.",
         openSettings: "Apri Impostazioni di Sistema",
         noFans: "Questo Mac non ha ventole controllabili.",
         unsupported: "Il controllo ventole non è disponibile su questo Mac.",
@@ -532,7 +532,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU più calda",
         hottestGPU: "GPU più calda",
         gpuIdle: "GPU a riposo",
-        helperUnavailable: "Il controller protetto delle ventole non è disponibile. Consenti Vorssaint negli elementi di login e riprova.",
+        helperUnavailable: "Il controller protetto delle ventole non è disponibile. Consenti ztat negli elementi di login e riprova.",
         resumeAfterRestart: "Riprendi dopo il riavvio o lo stop"
     )
 
@@ -544,7 +544,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "ファン%d",
         rpmFormat: "%d RPM",
         allowControl: "ファン制御を許可",
-        approvalCaption: "保護されたファン制御を使うには、ログイン項目でVorssaintを許可してください。",
+        approvalCaption: "保護されたファン制御を使うには、ログイン項目でztatを許可してください。",
         openSettings: "システム設定を開く",
         noFans: "このMacには制御可能なファンがありません。",
         unsupported: "このMacではファン制御を利用できません。",
@@ -583,7 +583,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "最高CPU",
         hottestGPU: "最高GPU",
         gpuIdle: "GPU はアイドル状態",
-        helperUnavailable: "保護されたファンコントローラを利用できません。ログイン項目でVorssaintを許可してから、もう一度お試しください。",
+        helperUnavailable: "保護されたファンコントローラを利用できません。ログイン項目でztatを許可してから、もう一度お試しください。",
         resumeAfterRestart: "再起動やスリープのあとに再開"
     )
 
@@ -595,7 +595,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "팬 %d",
         rpmFormat: "%d RPM",
         allowControl: "팬 제어 허용",
-        approvalCaption: "보호된 팬 제어를 사용하려면 로그인 항목에서 Vorssaint를 허용하세요.",
+        approvalCaption: "보호된 팬 제어를 사용하려면 로그인 항목에서 ztat를 허용하세요.",
         openSettings: "시스템 설정 열기",
         noFans: "이 Mac에는 제어 가능한 팬이 없습니다.",
         unsupported: "이 Mac에서는 팬 제어를 사용할 수 없습니다.",
@@ -634,7 +634,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "가장 뜨거운 CPU",
         hottestGPU: "가장 뜨거운 GPU",
         gpuIdle: "GPU 유휴 상태",
-        helperUnavailable: "보호된 팬 컨트롤러를 사용할 수 없습니다. 로그인 항목에서 Vorssaint를 허용한 다음 다시 시도하세요.",
+        helperUnavailable: "보호된 팬 컨트롤러를 사용할 수 없습니다. 로그인 항목에서 ztat를 허용한 다음 다시 시도하세요.",
         resumeAfterRestart: "재시작 또는 잠자기 후 다시 적용"
     )
 
@@ -646,7 +646,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "风扇%d",
         rpmFormat: "%d RPM",
         allowControl: "允许风扇控制",
-        approvalCaption: "请在登录项中允许Vorssaint使用受保护的风扇控制。",
+        approvalCaption: "请在登录项中允许ztat使用受保护的风扇控制。",
         openSettings: "打开系统设置",
         noFans: "这台Mac没有可控风扇。",
         unsupported: "这台Mac不支持风扇控制。",
@@ -685,7 +685,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU最高温度",
         hottestGPU: "GPU最高温度",
         gpuIdle: "GPU 空闲",
-        helperUnavailable: "受保护的风扇控制器不可用。请在登录项中允许 Vorssaint，然后重试。",
+        helperUnavailable: "受保护的风扇控制器不可用。请在登录项中允许 ztat，然后重试。",
         resumeAfterRestart: "重新启动或睡眠后恢复"
     )
 
@@ -697,7 +697,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "風扇%d",
         rpmFormat: "%d RPM",
         allowControl: "允許風扇控制",
-        approvalCaption: "請在登入項目中允許Vorssaint使用受保護的風扇控制。",
+        approvalCaption: "請在登入項目中允許ztat使用受保護的風扇控制。",
         openSettings: "打開系統設定",
         noFans: "這台Mac沒有可控制的風扇。",
         unsupported: "這台Mac不支援風扇控制。",
@@ -736,7 +736,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU最高溫度",
         hottestGPU: "GPU最高溫度",
         gpuIdle: "GPU 閒置",
-        helperUnavailable: "受保護的風扇控制器無法使用。請在登入項目中允許 Vorssaint，然後再試一次。",
+        helperUnavailable: "受保護的風扇控制器無法使用。請在登入項目中允許 ztat，然後再試一次。",
         resumeAfterRestart: "重新開機或睡眠後恢復"
     )
 
@@ -748,7 +748,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "風扇%d",
         rpmFormat: "%d RPM",
         allowControl: "允許風扇控制",
-        approvalCaption: "請在登入項目中允許Vorssaint使用受保護的風扇控制。",
+        approvalCaption: "請在登入項目中允許ztat使用受保護的風扇控制。",
         openSettings: "開啟系統設定",
         noFans: "這部Mac沒有可控制的風扇。",
         unsupported: "這部Mac不支援風扇控制。",
@@ -787,7 +787,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "CPU最高溫度",
         hottestGPU: "GPU最高溫度",
         gpuIdle: "GPU 閒置",
-        helperUnavailable: "受保護的風扇控制器無法使用。請在登入項目允許 Vorssaint，然後再試一次。",
+        helperUnavailable: "受保護的風扇控制器無法使用。請在登入項目允許 ztat，然後再試一次。",
         resumeAfterRestart: "重新啟動或睡眠後恢復"
     )
     static let uk = FanControlFeatureStrings(
@@ -798,7 +798,7 @@ extension FanControlFeatureStrings {
         fanNameFormat: "Вентилятор %d",
         rpmFormat: "%d об/хв",
         allowControl: "Дозволити керування вентиляторами",
-        approvalCaption: "Дозвольте Vorssaint у розділі «Автозапуск», щоб використовувати захищений контролер вентиляторів.",
+        approvalCaption: "Дозвольте ztat у розділі «Автозапуск», щоб використовувати захищений контролер вентиляторів.",
         openSettings: "Відкрити Системні параметри",
         noFans: "На цьому Mac немає вентилятора, яким можна керувати.",
         unsupported: "Керування вентиляторами недоступне на цьому Mac.",
@@ -837,7 +837,7 @@ extension FanControlFeatureStrings {
         hottestCPU: "Найгарячіший CPU",
         hottestGPU: "Найгарячіший GPU",
         gpuIdle: "GPU у стані спокою",
-        helperUnavailable: "Захищений контролер вентиляторів недоступний. Дозвольте Vorssaint у розділі «Автозапуск» і спробуйте знову.",
+        helperUnavailable: "Захищений контролер вентиляторів недоступний. Дозвольте ztat у розділі «Автозапуск» і спробуйте знову.",
         resumeAfterRestart: "Відновлювати після перезавантаження або сну"
     )
 }

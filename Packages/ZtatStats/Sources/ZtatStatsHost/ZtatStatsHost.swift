@@ -55,6 +55,7 @@ public final class ZtatStatsHost: ObservableObject {
     @Published public private(set) var enabledModuleCount: Int = 0
     @Published public private(set) var moduleSummaries: [StatsModuleSummary] = []
     @Published public private(set) var isCombinedModulesEnabled: Bool = false
+    @Published public private(set) var settingsRevision: Int = 0
 
     private var isStarted: Bool = false
     private var combinedView: CombinedView?
@@ -100,6 +101,36 @@ public final class ZtatStatsHost: ObservableObject {
         let combined = CombinedView()
         self.combinedView = combined
 
+        // ZTAT-PATCH: Route individual Stats menu bar clicks into Vitals unified popover (Option-click keeps classic popup)
+        Module.customPopupToggleHandler = { moduleName, anchorWindow, _, _ in
+            let pane = VitalsPane.fromStatsModuleName(moduleName)
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    VitalsPopoverWindow.shared.toggle(relativeTo: anchorWindow, targetPane: pane)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        VitalsPopoverWindow.shared.toggle(relativeTo: anchorWindow, targetPane: pane)
+                    }
+                }
+            }
+            return true
+        }
+        Module.customPopupDismissHandler = {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    VitalsPopoverWindow.shared.dismiss()
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        VitalsPopoverWindow.shared.dismiss()
+                    }
+                }
+            }
+        }
+
         // STRICT ZERO-IDLE RULE:
         // Only mount modules that the user has explicitly enabled in Store.
         // When 0 modules are enabled: 0 NSStatusItems are created, 0 readers start,
@@ -127,6 +158,9 @@ public final class ZtatStatsHost: ObservableObject {
         self.observers.removeAll()
 
         modules.forEach { $0.terminate() }
+        VitalsPopoverWindow.shared.dismiss()
+        Module.customPopupToggleHandler = nil
+        Module.customPopupDismissHandler = nil
         self.combinedView?.disable()
         self.combinedView = nil
         self.setEmbeddedSettingsTarget(nil)
@@ -297,6 +331,124 @@ public final class ZtatStatsHost: ObservableObject {
         self.moduleSummaries.first(where: { $0.id == moduleName })
     }
 
+    public func orderedModuleIDs() -> [String] {
+        if !self.isStarted {
+            self.start()
+        }
+        return modules
+            .sorted { $0.combinedPosition < $1.combinedPosition }
+            .map(\.name)
+    }
+
+    public func moveModules(fromOffsets source: IndexSet, toOffset destination: Int) {
+        if !self.isStarted {
+            self.start()
+        }
+        var ordered = modules.sorted { $0.combinedPosition < $1.combinedPosition }
+        ordered.move(fromOffsets: source, toOffset: destination)
+        for (idx, mod) in ordered.enumerated() {
+            mod.combinedPosition = idx
+        }
+        NotificationCenter.default.post(name: .moduleRearrange, object: nil, userInfo: nil)
+        self.combinedView?.syncVisibility()
+        self.refreshSummaries()
+    }
+
+    /// Rebuilds all Stats module instances from Store.shared live so Import & Reset apply immediately with zero restart.
+    public func reloadAllFromStore() {
+        let wasStarted = self.isStarted
+        let previousTarget = self.visibleEmbeddedModule
+
+        if wasStarted {
+            VitalsPopoverWindow.shared.dismiss()
+            self.setEmbeddedSettingsTarget(nil)
+            modules.forEach { $0.terminate() }
+            self.combinedView?.disable()
+            self.combinedView = nil
+            self.embeddedDashboard = nil
+            self.embeddedAppSettings = nil
+            self.liveBadges.removeAll()
+        } else {
+            ZtatStatsStatusBarWorkaround.suppressStatusBarTilingConstraintUpdates()
+            _ = SystemKit.shared
+        }
+
+        let createdModules: [Module] = [
+            CPU(),
+            GPU(),
+            RAM(),
+            Disk(),
+            Sensors(),
+            Network(),
+            Battery(),
+            Bluetooth(),
+            Clock()
+        ]
+        modules = createdModules
+
+        for module in createdModules {
+            module.liveBadgeCallback = { [weak self] moduleName, badge in
+                Task { @MainActor [weak self] in
+                    self?.handleLiveBadgeUpdate(moduleName: moduleName, badge: badge)
+                }
+            }
+        }
+
+        let combined = CombinedView()
+        self.combinedView = combined
+
+        // ZTAT-PATCH: Route individual Stats menu bar clicks into Vitals unified popover (Option-click keeps classic popup)
+        Module.customPopupToggleHandler = { moduleName, anchorWindow, _, _ in
+            let pane = VitalsPane.fromStatsModuleName(moduleName)
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    VitalsPopoverWindow.shared.toggle(relativeTo: anchorWindow, targetPane: pane)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        VitalsPopoverWindow.shared.toggle(relativeTo: anchorWindow, targetPane: pane)
+                    }
+                }
+            }
+            return true
+        }
+        Module.customPopupDismissHandler = {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    VitalsPopoverWindow.shared.dismiss()
+                }
+            } else {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        VitalsPopoverWindow.shared.dismiss()
+                    }
+                }
+            }
+        }
+
+        let activeList = createdModules.filter { $0.enabled && $0.available }
+        if !activeList.isEmpty {
+            createdModules.reversed().forEach { module in
+                if module.enabled && module.available {
+                    module.mount()
+                }
+            }
+        }
+        combined.syncVisibility()
+        self.isStarted = true
+        if self.observers.isEmpty {
+            self.installObservers()
+        }
+        self.isCombinedModulesEnabled = Store.shared.bool(key: "CombinedModules", defaultValue: false)
+        self.settingsRevision &+= 1
+        if let previousTarget {
+            self.setEmbeddedSettingsTarget(previousTarget)
+        }
+        self.refreshSummaries()
+        NotificationCenter.default.post(name: .ztatStatsDidChange, object: nil)
+    }
+
     public func resetAllStatsPreferences() {
         if !self.isStarted {
             self.start()
@@ -310,13 +462,7 @@ public final class ZtatStatsHost: ObservableObject {
         Store.shared.reset()
         self.isCombinedModulesEnabled = false
 
-        self.setEmbeddedSettingsTarget(nil)
-        self.embeddedDashboard = nil
-        self.embeddedAppSettings = nil
-
-        self.combinedView?.syncVisibility()
-        self.refreshSummaries()
-        NotificationCenter.default.post(name: .ztatStatsDidChange, object: nil)
+        self.reloadAllFromStore()
     }
 
     public func refreshSummaries() {

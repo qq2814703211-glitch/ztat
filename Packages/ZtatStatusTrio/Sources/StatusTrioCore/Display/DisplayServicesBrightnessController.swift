@@ -4,7 +4,7 @@ import Foundation
 import os
 
 private let displayServicesLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "DisplayServices"
 )
 
@@ -58,7 +58,7 @@ protocol DisplayServicesBrightnessAPI: AnyObject, Sendable {
 /// id. Old callbacks cannot reach a replacement controller after a restart.
 extension Notification.Name {
     static let displayServicesBrightnessDidChange = Notification.Name(
-        "com.lingsmbp.StatusTrio.displayServicesBrightnessDidChange"
+        "dev.ztat.app.displayServicesBrightnessDidChange"
     )
 }
 

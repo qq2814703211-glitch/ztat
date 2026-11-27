@@ -72,7 +72,7 @@ final class PowerSamplingService: ObservableObject {
     }
 
     private static let queue = DispatchQueue(
-        label: "com.lingsmbp.StatusTrio.power-sampling",
+        label: "dev.ztat.app.power-sampling",
         qos: .utility
     )
     private let reader: Reader

@@ -161,7 +161,7 @@ public class SMC {
     public static let shared = SMC()
     private var conn: io_connect_t = 0
     private var _fanModeKeyIsLower: Bool?
-    private let keyInfoLock = NSLock()
+    private let keyInfoLock = NSRecursiveLock()
     private var keyInfoCache: [UInt32: SMCKeyData_t.keyInfo_t] = [:]
     
     public init() {
@@ -319,6 +319,8 @@ public class SMC {
     }
     
     public func getAllKeys() -> [String] {
+        self.keyInfoLock.lock()
+        defer { self.keyInfoLock.unlock() }
         var list: [String] = []
         
         let keysNum: Double? = self.getValue("#KEY")
@@ -367,11 +369,13 @@ public class SMC {
     
     public func fanModeKey(_ id: Int) -> String {
         #if arch(arm64)
+        self.keyInfoLock.lock()
+        defer { self.keyInfoLock.unlock() }
         if self._fanModeKeyIsLower == nil {
             var probe = SMCVal_t("F0md")
             self._fanModeKeyIsLower = self.read(&probe) == kIOReturnSuccess && probe.dataSize > 0
         }
-        return self._fanModeKeyIsLower! ? "F\(id)md" : "F\(id)Md"
+        return (self._fanModeKeyIsLower ?? false) ? "F\(id)md" : "F\(id)Md"
         #else
         return "F\(id)Md"
         #endif
@@ -686,6 +690,8 @@ public class SMC {
     
     private func write(_ value: SMCVal_t) -> kern_return_t {
         guard value.key.count == 4, value.key.utf8.count == 4 else { return kIOReturnBadArgument }
+        self.keyInfoLock.lock()
+        defer { self.keyInfoLock.unlock() }
         var input = SMCKeyData_t()
         var output = SMCKeyData_t()
         

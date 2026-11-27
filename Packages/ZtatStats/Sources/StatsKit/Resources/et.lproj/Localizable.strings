@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Desinstalli ventilaatoriabiline";
 "Approve in System Settings ▸ Login Items" = "Kinnita Süsteemi seadetes ▸ Sisselogimise üksused"; // gemma4:31b
 "Fan helper needs your approval" = "Ventilaatori abiutill vajab teie heaks kiitmist"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Ventilaatorite juhtimiseks aktiveeri Stats Süsteemi seadetes ▸ Sisselogimise üksused."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Ventilaatorite juhtimiseks aktiveeri ztat Süsteemi seadetes ▸ Sisselogimise üksused."; // gemma4:31b
 "Open Login Items" = "Ava sisselogimise üksused"; // gemma4:31b
 "Could not enable the fan helper" = "Ei õnnestunud ventilaatori abiutliiti aktiveerida"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Ava Süsteemi seaded ▸ Logimise üksused, veendu, et Stats on lubatud taustal, seejärel proovi uuesti."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Ava Süsteemi seaded ▸ Logimise üksused, veendu, et ztat on lubatud taustal, seejärel proovi uuesti."; // gemma4:31b
 "Fan value" = "Ventilaatori väärtus";
 "Turn off fan" = "Lülita ventilaator välja";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Te kavatstate lülitada ventilator välja. See ei ole soovitatav tegevus, mis võib kahjustada teie Mac-i. Kas olete kindel, et soovite seda teha?";

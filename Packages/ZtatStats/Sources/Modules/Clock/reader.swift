@@ -16,8 +16,8 @@ import StatsKit
 internal class ClockReader: Reader<Date> {
     private let title: String = ModuleType.clock.stringValue
     
-    private let queue = DispatchQueue(label: "eu.exelban.Stats.Clock.ntp.sync", qos: .default)
-    private let requestQueue = DispatchQueue(label: "eu.exelban.Stats.Clock.ntp.request", qos: .utility)
+    private let queue = DispatchQueue(label: "dev.ztat.stats.Clock.ntp.sync", qos: .default)
+    private let requestQueue = DispatchQueue(label: "dev.ztat.stats.Clock.ntp.request", qos: .utility)
     private var _offset: TimeInterval = 0
     private var offset: TimeInterval {
         get { self.queue.sync { self._offset } }

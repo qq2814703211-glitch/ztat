@@ -7,11 +7,11 @@ import UserNotifications
 
 enum Notifier {
     static let whatsAppOrganizerUndoActionIdentifier =
-        "com.vorssaint.notification.whatsapp-organizer.undo"
+        "dev.ztat.toolbox.notification.whatsapp-organizer.undo"
     private static let whatsAppOrganizerTransactionKey =
-        "com.vorssaint.notification.whatsapp-organizer.transaction"
+        "dev.ztat.toolbox.notification.whatsapp-organizer.transaction"
     private static let whatsAppOrganizerCategoryIdentifier =
-        "com.vorssaint.notification.whatsapp-organizer"
+        "dev.ztat.toolbox.notification.whatsapp-organizer"
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "vorssaint",
                                     category: "notifications")
 

@@ -20,7 +20,7 @@ final class WindowServerWindowList {
     // call. Queued cancelled sessions do no work; threads cannot grow unbounded.
     private static let captureQueue: OperationQueue = {
         let queue = OperationQueue()
-        queue.name = "com.vorssaint.switcher.window-server-metadata"
+        queue.name = "dev.ztat.toolbox.switcher.window-server-metadata"
         queue.qualityOfService = .userInitiated
         queue.maxConcurrentOperationCount = 2
         return queue

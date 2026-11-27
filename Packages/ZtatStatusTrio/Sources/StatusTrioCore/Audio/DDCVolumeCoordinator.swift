@@ -321,7 +321,7 @@ final class DDCVolumeCoordinator {
 
 /// The transport and its non-Sendable target are only touched by this queue.
 private final class DDCWorker: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "com.status-trio.ddc-volume", qos: .utility)
+    private let queue = DispatchQueue(label: "dev.ztat.status.ddc-volume", qos: .utility)
     private let transport: DDCVolumeTransport
     private let beforeReadValidation: @Sendable () -> Void
     private var target: DDCDisplayTarget?

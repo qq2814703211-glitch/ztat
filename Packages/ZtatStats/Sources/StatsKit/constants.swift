@@ -32,13 +32,15 @@ public struct Settings_c_s {
 public struct Widget_c_s {
     public let width: CGFloat = 32
     public var height: CGFloat {
-        get {
-            let systemHeight = NSApplication.shared.mainMenu?.menuBarHeight
-            return (systemHeight == 0 ? 22 : systemHeight) ?? 22
-        }
+        // ZTAT-PATCH: Use NSStatusBar.system.thickness (22pt) instead of mainMenu.menuBarHeight.
+        // With ztat's standard mainMenu installed, mainMenu.menuBarHeight reports the notched display's
+        // full menu bar height (33–38pt) while NSStatusBarButton remains ~22–24pt, stretching vertical
+        // bars upward and clipping bottom text lines in Mini/Speed/Stack widgets.
+        let thickness = NSStatusBar.system.thickness
+        return thickness > 0 ? thickness : 22
     }
     public var margin: CGPoint {
-        get { CGPoint(x: 0, y: 2) }
+        get { CGPoint(x: 0, y: 0) }
     }
     public let spacing: CGFloat = 2
 }

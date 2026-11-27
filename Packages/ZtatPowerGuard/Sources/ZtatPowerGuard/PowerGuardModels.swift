@@ -51,6 +51,10 @@ public struct PowerGuardTelemetry: Equatable, Sendable {
     public var isCharging: Bool = false
     public var builtInBrightness: Float? = nil
     public var isPasswordlessSudoReady: Bool = false
+    public var isClamshellSudoLegacyOnly: Bool = false
+    public var isLowPowerMode: Bool = false
+    public var isHighPowerMode: Bool = false
+    public var supportsHighPowerMode: Bool = false
     public var hardwareModel: String = ""
     public var osVersion: String = ""
 
@@ -93,4 +97,31 @@ public enum PowerGuardDefaultsKey {
     public static let hasShownBlackoutGuide = p + "hasShownBlackoutGuide"
     public static let sleepDisabledOwned = p + "sleepDisabledOwned"
     public static let savedBlackoutBrightness = p + "savedBlackoutBrightness"
+
+    static let allKeys: [String] = [
+        selectedDuration, keepFramebufferAwake, allowDisplaySleep, autoDimOnLidClose,
+        lowBatteryAutoRestore, lowBatteryThreshold, restoreSleepOnQuit, hasShownBlackoutGuide,
+        sleepDisabledOwned, savedBlackoutBrightness,
+    ]
+}
+
+/// Shared UserDefaults suite used by BOTH `ztat.app` and `ztat-hold` CLI so crash recovery
+/// (`sleepDisabledOwned`, `savedBlackoutBrightness`) and settings remain consistent across binaries.
+public enum PowerGuardDefaults {
+    /// Apple documents `UserDefaults` as thread-safe; mark `nonisolated(unsafe)` for Swift 6 strict concurrency.
+    public nonisolated(unsafe) static let store: UserDefaults = {
+        let suite = UserDefaults(suiteName: ZtatBrand.powerGuardDefaultsSuite) ?? .standard
+        // One-time migration from legacy UserDefaults.standard keys when suite has no entries yet.
+        let migratedKey = ZtatBrand.powerGuardDefaultsPrefix + "migratedToSuite"
+        if !suite.bool(forKey: migratedKey) {
+            let legacy = UserDefaults.standard
+            for key in PowerGuardDefaultsKey.allKeys {
+                if suite.object(forKey: key) == nil, let val = legacy.object(forKey: key) {
+                    suite.set(val, forKey: key)
+                }
+            }
+            suite.set(true, forKey: migratedKey)
+        }
+        return suite
+    }()
 }

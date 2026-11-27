@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Verwijder ventilator-helper"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "Goedkeuren in Systeeminstellingen ▸ Inlogitems"; // gemma4:31b
 "Fan helper needs your approval" = "Fan-helper heeft uw goedkeuring nodig"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Om de ventilatoren te bedienen, schakel Stats in in Systeeminstellingen ▸ Inlogitems."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Om de ventilatoren te bedienen, schakel ztat in in Systeeminstellingen ▸ Inlogitems."; // gemma4:31b
 "Open Login Items" = "Open Inlogitems"; // gemma4:31b
 "Could not enable the fan helper" = "Kon de fan-helper niet inschakelen"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Open Systeeminstellingen ▸ Inlogitems, zorg ervoor dat Stats is toegestaan op de achtergrond, en probeer het dan opnieuw."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Open Systeeminstellingen ▸ Inlogitems, zorg ervoor dat ztat is toegestaan op de achtergrond, en probeer het dan opnieuw."; // gemma4:31b
 "Fan value" = "Ventilatorwaarde"; // gemma4:31b
 "Turn off fan" = "Ventilator uitschakelen"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Je gaat de ventilator uitschakelen. Dit is geen aanbevolen actie die je Mac kan beschadigen, weet je zeker dat je dit wilt doen?"; // gemma4:31b

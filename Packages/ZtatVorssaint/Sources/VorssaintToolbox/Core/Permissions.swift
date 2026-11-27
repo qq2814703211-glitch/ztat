@@ -7,7 +7,9 @@ import AVFoundation
 import Combine
 import CoreGraphics
 import EventKit
+import Security
 import UserNotifications
+import ZtatCore
 
 /// Central place to check, request and watch the TCC permissions the app uses.
 /// Accessibility powers the scroll inverter and the switcher's event tap;
@@ -259,7 +261,7 @@ final class Permissions: ObservableObject {
 
     /// Accessibility and Screen Recording only — free, side-effect-free checks
     /// suitable for frequent polling.
-    private func refreshActivePermissions() {
+    func refreshActivePermissions() {
         let ax = AXIsProcessTrusted()
         let sr = CGPreflightScreenCaptureAccess()
         DispatchQueue.main.async {
@@ -269,6 +271,106 @@ final class Permissions: ObservableObject {
             // landed while the app was in the background).
             self.scheduleActivePermissionPolling()
         }
+    }
+
+    /// ZTAT-PATCH: Synchronous live Screen Recording check so global hotkeys
+    /// in an `.accessory` menu-bar app never act on a stale cached boolean.
+    @discardableResult
+    func checkScreenRecordingLive() -> Bool {
+        let granted = CGPreflightScreenCaptureAccess()
+        if Thread.isMainThread {
+            if self.screenRecording != granted {
+                self.screenRecording = granted
+                self.scheduleActivePermissionPolling()
+            }
+        } else {
+            DispatchQueue.main.async {
+                if self.screenRecording != granted {
+                    self.screenRecording = granted
+                    self.scheduleActivePermissionPolling()
+                }
+            }
+        }
+        return granted
+    }
+
+    /// ZTAT-PATCH: Synchronous live Accessibility check.
+    @discardableResult
+    func checkAccessibilityLive() -> Bool {
+        let granted = AXIsProcessTrusted()
+        if Thread.isMainThread {
+            if self.accessibility != granted {
+                self.accessibility = granted
+                self.scheduleActivePermissionPolling()
+            }
+        } else {
+            DispatchQueue.main.async {
+                if self.accessibility != granted {
+                    self.accessibility = granted
+                    self.scheduleActivePermissionPolling()
+                }
+            }
+        }
+        return granted
+    }
+
+    struct CodeSigningDiagnostic {
+        let authority: String?
+        let isStableCertificate: Bool
+        let designatedRequirement: String?
+    }
+
+    /// ZTAT-PATCH: Process code signature is immutable for its lifetime — cache once instead of
+    /// calling Security IPC synchronously on every SwiftUI body re-render.
+    static let cachedCodeSigningDiagnostic: CodeSigningDiagnostic = currentCodeSigningDiagnostic()
+
+    /// ZTAT-PATCH: Inspect the running app's code signature and designated
+    /// requirement to confirm TCC entries persist across restarts and updates.
+    static func currentCodeSigningDiagnostic() -> CodeSigningDiagnostic {
+        var code: SecCode?
+        guard SecCodeCopySelf([], &code) == errSecSuccess, let selfCode = code else {
+            return CodeSigningDiagnostic(authority: nil, isStableCertificate: false, designatedRequirement: nil)
+        }
+        var staticCode: SecStaticCode?
+        SecCodeCopyStaticCode(selfCode, [], &staticCode)
+
+        var reqString: String?
+        var signatureValid = false
+        if let sc = staticCode {
+            signatureValid = (SecStaticCodeCheckValidity(sc, [], nil) == errSecSuccess)
+            var req: SecRequirement?
+            if SecCodeCopyDesignatedRequirement(sc, [], &req) == errSecSuccess, let req {
+                var cfStr: CFString?
+                if SecRequirementCopyString(req, [], &cfStr) == errSecSuccess, let cfStr {
+                    reqString = cfStr as String
+                }
+            }
+        }
+
+        var authority: String?
+        if let sc = staticCode {
+            var infoCF: CFDictionary?
+            if SecCodeCopySigningInformation(sc, SecCSFlags(rawValue: kSecCSSigningInformation), &infoCF) == errSecSuccess,
+               let info = infoCF as? [String: Any],
+               let certs = info[kSecCodeInfoCertificates as String] as? [SecCertificate],
+               let leaf = certs.first {
+                var cn: CFString?
+                if SecCertificateCopyCommonName(leaf, &cn) == errSecSuccess, let cn {
+                    authority = cn as String
+                }
+            }
+        }
+
+        let hasCertDR = reqString?.contains("certificate leaf") == true || reqString?.contains("anchor apple") == true
+        let isStable = signatureValid && (authority != nil) && hasCertDR
+        return CodeSigningDiagnostic(authority: authority, isStableCertificate: isStable, designatedRequirement: reqString)
+    }
+
+    /// ZTAT-PATCH: Cleanly relaunch the current app bundle via the single detached
+    /// POSIX_SPAWN_SETSID relaunch path in ZtatHostBridge (macOS requires relaunching
+    /// after toggling Screen Recording for SkyLight's per-process token cache).
+    func relaunchApp() {
+        ZtatHostBridge.shared.relaunchApp()
     }
 
     /// Protected directories safe to use both as access probes and as
@@ -312,8 +414,7 @@ final class Permissions: ObservableObject {
     func requestAccessibility() {
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         AXIsProcessTrustedWithOptions(options)
-        refreshActivePermissions()
-        if !accessibility {
+        if !checkAccessibilityLive() {
             PermissionGuideOverlay.shared.show(for: .accessibility)
         }
     }
@@ -322,8 +423,7 @@ final class Permissions: ObservableObject {
     /// floats the guide card, like the Accessibility path.
     func requestScreenRecording() {
         CGRequestScreenCaptureAccess()
-        refreshActivePermissions()
-        if !screenRecording {
+        if !checkScreenRecordingLive() {
             PermissionGuideOverlay.shared.show(for: .screenRecording)
         }
     }

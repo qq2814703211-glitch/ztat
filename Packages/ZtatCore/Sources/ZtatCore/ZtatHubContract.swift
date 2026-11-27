@@ -34,8 +34,12 @@ public enum ZtatHubTab: String, CaseIterable, Identifiable, Sendable {
 
 public enum ZtatSettingsSection: String, CaseIterable, Identifiable, Sendable {
     case general
-    case statusTrio
+    case permissions
+    case taskManager
     case powerGuard
+    case island
+    case cleaner
+    case statusTrio
     case stats
     case toolbox
 
@@ -43,10 +47,13 @@ public enum ZtatSettingsSection: String, CaseIterable, Identifiable, Sendable {
 }
 
 /// Fine-grained deep-link route into ztat's single unified Settings window.
-/// Eliminates all separate upstream Settings windows by targeting exact sub-pages directly.
 public enum ZtatSettingsRoute: Equatable, Hashable, Sendable {
     case general
+    case permissions
+    case taskManager
     case powerGuard
+    case island(sectionID: String? = nil)
+    case cleaner(sectionID: String? = nil)
     case statusTrio(sectionID: String? = nil)
     case stats(target: String? = nil)
     case toolbox(itemID: String? = nil)
@@ -54,7 +61,11 @@ public enum ZtatSettingsRoute: Equatable, Hashable, Sendable {
     public init(section: ZtatSettingsSection) {
         switch section {
         case .general: self = .general
+        case .permissions: self = .permissions
+        case .taskManager: self = .taskManager
         case .powerGuard: self = .powerGuard
+        case .island: self = .island(sectionID: nil)
+        case .cleaner: self = .cleaner(sectionID: nil)
         case .statusTrio: self = .statusTrio(sectionID: nil)
         case .stats: self = .stats(target: nil)
         case .toolbox: self = .toolbox(itemID: nil)
@@ -65,13 +76,21 @@ public enum ZtatSettingsRoute: Equatable, Hashable, Sendable {
 public extension Notification.Name {
     static let ztatOpenHubTab = Notification.Name("dev.ztat.openHubTab")
     static let ztatOpenSettings = Notification.Name("dev.ztat.openSettings")
+    static let ztatOpenAppUninstaller = Notification.Name("dev.ztat.openAppUninstaller")
+    static let ztatToggleTaskManager = Notification.Name("dev.ztat.toggleTaskManager")
+    static let ztatOpenTaskManager = Notification.Name("dev.ztat.openTaskManager")
+    static let ztatHubPanelVisibilityDidChange = Notification.Name("dev.ztat.hubPanelVisibilityDidChange")
     static let ztatPowerGuardDidChange = Notification.Name("dev.ztat.powerGuardDidChange")
     static let ztatStatsDidChange = Notification.Name("dev.ztat.statsDidChange")
-    static let ztatVorssaintMicMuteDidChange = Notification.Name("dev.ztat.vorssaintMicMuteDidChange")
+    static let ztatIslandDidChange = Notification.Name("dev.ztat.islandDidChange")
+    static let ztatCleanerDidChange = Notification.Name("dev.ztat.cleanerDidChange")
+    static let ztatMicMuteDidChange = Notification.Name("dev.ztat.micMuteDidChange")
+    static let ztatLanguageDidChange = Notification.Name("dev.ztat.languageDidChange")
+    static let ztatAppearanceDidChange = Notification.Name("dev.ztat.appearanceDidChange")
 }
 
-/// Cross-module read-only snapshot of ZtatPowerGuard so Vorssaint (Dynamic Island),
-/// Status Trio (icon/right-click), and ZtatApp header pills stay synchronized without circular dependencies.
+/// Cross-module read-only snapshot of ZtatPowerGuard so Dynamic Island,
+/// Status Hub (Power Modes / Quick Actions / Battery), and ZtatApp stay synchronized without circular dependencies.
 public struct ZtatPowerGuardSnapshot: Equatable, Sendable {
     public var isActive: Bool
     public var isIdleKeepAwakeActive: Bool
@@ -80,10 +99,15 @@ public struct ZtatPowerGuardSnapshot: Equatable, Sendable {
     public var isLidClosed: Bool
     public var isDisplayAsleep: Bool
     public var isOnACPower: Bool
+    public var isCharging: Bool
     public var batteryPercentage: Int?
     public var remainingSeconds: TimeInterval?
     public var expirationDate: Date?
     public var summaryLabel: String
+    public var isLowPowerMode: Bool
+    public var isHighPowerMode: Bool
+    public var supportsHighPowerMode: Bool
+    public var isPasswordlessSudoReady: Bool
 
     public init(
         isActive: Bool = false,
@@ -93,10 +117,15 @@ public struct ZtatPowerGuardSnapshot: Equatable, Sendable {
         isLidClosed: Bool = false,
         isDisplayAsleep: Bool = false,
         isOnACPower: Bool = true,
+        isCharging: Bool = false,
         batteryPercentage: Int? = nil,
         remainingSeconds: TimeInterval? = nil,
         expirationDate: Date? = nil,
-        summaryLabel: String = ""
+        summaryLabel: String = "",
+        isLowPowerMode: Bool = false,
+        isHighPowerMode: Bool = false,
+        supportsHighPowerMode: Bool = false,
+        isPasswordlessSudoReady: Bool = false
     ) {
         self.isActive = isActive
         self.isIdleKeepAwakeActive = isIdleKeepAwakeActive
@@ -105,10 +134,15 @@ public struct ZtatPowerGuardSnapshot: Equatable, Sendable {
         self.isLidClosed = isLidClosed
         self.isDisplayAsleep = isDisplayAsleep
         self.isOnACPower = isOnACPower
+        self.isCharging = isCharging
         self.batteryPercentage = batteryPercentage
         self.remainingSeconds = remainingSeconds
         self.expirationDate = expirationDate
         self.summaryLabel = summaryLabel
+        self.isLowPowerMode = isLowPowerMode
+        self.isHighPowerMode = isHighPowerMode
+        self.supportsHighPowerMode = supportsHighPowerMode
+        self.isPasswordlessSudoReady = isPasswordlessSudoReady
     }
 }
 
@@ -116,9 +150,18 @@ public struct ZtatPowerGuardSnapshot: Equatable, Sendable {
 public protocol ZtatPowerGuardControlling: AnyObject {
     var currentSnapshot: ZtatPowerGuardSnapshot { get }
     func toggleRemoteReadyMode()
+    func toggleIdleKeepAwake()
+    func toggleClamshellLock()
     func toggleBlackoutMode()
     func activateForDuration(seconds: TimeInterval?)
     func disableAll()
+    func refreshPowerModes() async
+    func readLowPowerMode() async -> Bool
+    func readHighPowerModeSupport() async -> Bool
+    func readHighPowerMode() async -> Bool
+    func setLowPowerMode(_ enabled: Bool, allowInteractivePrompt: Bool) async -> (success: Bool, observed: Bool, error: String?)
+    func setHighPowerMode(_ enabled: Bool, allowInteractivePrompt: Bool) async -> (success: Bool, observed: Bool, error: String?)
+    func installPasswordlessSudoers() async -> (success: Bool, error: String?)
 }
 
 @MainActor
@@ -145,6 +188,14 @@ public final class ZtatPowerGuardRegistry: ObservableObject {
         controller?.toggleRemoteReadyMode()
     }
 
+    public func toggleIdleKeepAwake() {
+        controller?.toggleIdleKeepAwake()
+    }
+
+    public func toggleClamshellLock() {
+        controller?.toggleClamshellLock()
+    }
+
     public func toggleBlackoutMode() {
         controller?.toggleBlackoutMode()
     }
@@ -155,5 +206,51 @@ public final class ZtatPowerGuardRegistry: ObservableObject {
 
     public func disableAll() {
         controller?.disableAll()
+    }
+
+    public func refreshPowerModes() async {
+        await controller?.refreshPowerModes()
+    }
+
+    public func readLowPowerMode() async -> Bool {
+        if let controller {
+            return await controller.readLowPowerMode()
+        }
+        return ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
+
+    public func readHighPowerModeSupport() async -> Bool {
+        if let controller {
+            return await controller.readHighPowerModeSupport()
+        }
+        return false
+    }
+
+    public func readHighPowerMode() async -> Bool {
+        if let controller {
+            return await controller.readHighPowerMode()
+        }
+        return false
+    }
+
+    public func setLowPowerMode(_ enabled: Bool, allowInteractivePrompt: Bool = true) async -> (success: Bool, observed: Bool, error: String?) {
+        guard let controller else {
+            return (false, ProcessInfo.processInfo.isLowPowerModeEnabled, "PowerGuard engine not initialized")
+        }
+        return await controller.setLowPowerMode(enabled, allowInteractivePrompt: allowInteractivePrompt)
+    }
+
+    public func setHighPowerMode(_ enabled: Bool, allowInteractivePrompt: Bool = true) async -> (success: Bool, observed: Bool, error: String?) {
+        guard let controller else {
+            return (false, false, "PowerGuard engine not initialized")
+        }
+        return await controller.setHighPowerMode(enabled, allowInteractivePrompt: allowInteractivePrompt)
+    }
+
+    public func installPasswordlessSudoers() async -> (success: Bool, error: String?) {
+        guard let controller else {
+            return (false, "PowerGuard engine not initialized")
+        }
+        return await controller.installPasswordlessSudoers()
     }
 }

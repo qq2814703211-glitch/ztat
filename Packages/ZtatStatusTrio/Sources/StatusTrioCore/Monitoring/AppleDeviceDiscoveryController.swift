@@ -3,7 +3,7 @@ import Foundation
 import OSLog
 
 private let appleDeviceDiscoveryLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "apple-device-discovery"
 )
 

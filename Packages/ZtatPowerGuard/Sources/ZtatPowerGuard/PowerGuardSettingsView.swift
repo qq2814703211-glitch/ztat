@@ -6,13 +6,34 @@ import ZtatCore
 /// Settings pane for ZtatPowerGuard inside ztat's unified Settings window.
 public struct PowerGuardSettingsView: View {
     @ObservedObject private var coordinator: PowerGuardCoordinator
+    @ObservedObject private var l10n = ZtatLocalizationStore.shared
 
     public init(coordinator: PowerGuardCoordinator = .shared) {
         self.coordinator = coordinator
     }
 
     public var body: some View {
+        let _ = l10n.revision
         Form {
+            if coordinator.needsManualSleepRecovery {
+                Section {
+                    HStack(spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                        Text(ZtatL10n.tr(
+                            "检测到上次异常退出后系统仍处于合盖不休眠状态。",
+                            "System clamshell sleep is still disabled from a previous unclean exit."
+                        ))
+                        .font(.callout)
+                        Spacer()
+                        Button(ZtatL10n.tr("恢复默认休眠", "Restore Default Sleep")) {
+                            coordinator.disableAll()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+            }
+
             Section(ZtatL10n.tr("保活与合盖守护", "Keep-Awake & Clamshell Guard")) {
                 Picker(ZtatL10n.tr("默认保活时长", "Default Duration"), selection: $coordinator.selectedDuration) {
                     ForEach(PowerGuardDuration.allCases) { dur in
@@ -49,23 +70,28 @@ public struct PowerGuardSettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section(ZtatL10n.tr("最小权限免密授权与 CLI", "Least-Privilege Sudoers & CLI")) {
+            Section(ZtatL10n.tr("最小权限免密电源控制与 CLI", "Least-Privilege Passwordless Power Control & CLI")) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(ZtatL10n.tr("免密 pmset 规则", "Passwordless pmset Rule"))
-                        Text(coordinator.telemetry.isPasswordlessSudoReady
-                             ? ZtatL10n.tr("已安装于 \(ClamshellSudoEngine.sudoersPath)", "Installed at \(ClamshellSudoEngine.sudoersPath)")
-                             : ZtatL10n.tr("未安装（切换合盖锁时会弹出系统认证框）", "Not installed (macOS authentication prompt required)"))
+                        Text(ZtatL10n.tr("统一免密 pmset 规则", "Unified Passwordless pmset Rule"))
+                        Text(sudoersSubtitle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button(coordinator.telemetry.isPasswordlessSudoReady
-                           ? ZtatL10n.tr("移除规则", "Remove")
-                           : ZtatL10n.tr("配置免密", "Install")) {
-                        coordinator.togglePasswordlessSudo()
+                    if coordinator.telemetry.isClamshellSudoLegacyOnly {
+                        Button(ZtatL10n.tr("升级规则", "Upgrade")) {
+                            Task { _ = await coordinator.installPasswordlessSudoers() }
+                        }
+                        .disabled(coordinator.isBusy)
+                    } else {
+                        Button(coordinator.telemetry.isPasswordlessSudoReady
+                               ? ZtatL10n.tr("移除规则", "Remove")
+                               : ZtatL10n.tr("一键配置免密", "Install")) {
+                            coordinator.togglePasswordlessSudo()
+                        }
+                        .disabled(coordinator.isBusy)
                     }
-                    .disabled(coordinator.isBusy)
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
@@ -81,6 +107,30 @@ public struct PowerGuardSettingsView: View {
         .formStyle(.grouped)
         .onAppear {
             coordinator.refreshTelemetry()
+            Task {
+                _ = await ClamshellSudoEngine.shared.refreshPasswordlessSudoStatus()
+                await coordinator.refreshPowerModes()
+                coordinator.refreshTelemetry()
+            }
         }
+    }
+
+    private var sudoersSubtitle: String {
+        if coordinator.telemetry.isPasswordlessSudoReady {
+            return ZtatL10n.tr(
+                "已就绪（\(ClamshellSudoEngine.sudoersPath)）：合盖锁、低电量模式、高能耗模式与低电量自动省电均可免密即时切换。",
+                "Ready (\(ClamshellSudoEngine.sudoersPath)): Clamshell lock, Low/High Power Mode, and Auto Low Power switch without prompts."
+            )
+        }
+        if coordinator.telemetry.isClamshellSudoLegacyOnly {
+            return ZtatL10n.tr(
+                "检测到旧版仅合盖规则，点击“升级规则”即可同时免密支持低电量与高能耗模式。",
+                "Legacy clamshell-only rule detected. Upgrade to enable passwordless Low/High Power Mode too."
+            )
+        }
+        return ZtatL10n.tr(
+            "未安装（手动切换合盖锁或能耗模式时会弹出系统认证框；安装后可免密切换并支持低电量自动省电）。",
+            "Not installed (manual toggles prompt for admin auth; install for silent switching and Auto Low Power)."
+        )
     }
 }

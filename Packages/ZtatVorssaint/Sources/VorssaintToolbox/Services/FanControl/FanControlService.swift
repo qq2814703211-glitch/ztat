@@ -30,7 +30,7 @@ final class FanControlService: ObservableObject {
 
     private static let log = Logger(subsystem: Bundle.main.bundleIdentifier ?? "vorssaint",
                                     category: "FanControl")
-    private let probeQueue = DispatchQueue(label: "com.vorssaint.fan-control.probe",
+    private let probeQueue = DispatchQueue(label: "dev.ztat.toolbox.fan-control.probe",
                                            qos: .utility)
     private var probeHardware: FanControlHardware?
     private var connection: NSXPCConnection?

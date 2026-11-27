@@ -188,8 +188,8 @@ public class StackWidget: WidgetWrapper {
             self.stickyWidths[key] = width
         }
         
-        let rect = CGRect(x: x, y: (Constants.Widget.height-13)/2, width: width, height: 13)
-        entry.string.draw(with: rect)
+        let rect = CGRect(x: x, y: (Constants.Widget.height-13)/2 + 2.0, width: width, height: 13)
+        entry.string.draw(in: rect)
         
         return width
     }
@@ -229,9 +229,9 @@ public class StackWidget: WidgetWrapper {
             self.stickyWidths[key] = width
         }
         
-        top.string.draw(with: CGRect(x: x, y: rowHeight+1, width: width, height: rowHeight))
+        top.string.draw(in: CGRect(x: x, y: rowHeight + 1.5, width: width, height: rowHeight))
         if let bottom {
-            bottom.string.draw(with: CGRect(x: x, y: 1, width: width, height: rowHeight))
+            bottom.string.draw(in: CGRect(x: x, y: 2.5, width: width, height: rowHeight))
         }
         
         return width

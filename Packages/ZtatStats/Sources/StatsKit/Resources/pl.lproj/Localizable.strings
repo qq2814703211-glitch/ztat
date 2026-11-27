@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Odinstaluj narzędzie do wentylatora";
 "Approve in System Settings ▸ Login Items" = "Zatwierdź w Ustawieniach systemowych ▸ Elementy logowania";
 "Fan helper needs your approval" = "Narzędzie do wentylatora potrzebuje zgody";
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Aby sterować wentylatorami, włącz Stats w Ustawieniach systemowych ▸ Elementy logowania.";
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Aby sterować wentylatorami, włącz ztat w Ustawieniach systemowych ▸ Elementy logowania.";
 "Open Login Items" = "Otwórz elementy logowania";
 "Could not enable the fan helper" = "Nie można włączyć narzędzia do wentylatora";
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Otwórz Ustawienia systemowe ▸ Elementy logowania, upewnij się, że aplikacja Stats może działać w tle, a następnie spróbuj ponownie";
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Otwórz Ustawienia systemowe ▸ Elementy logowania, upewnij się, że aplikacja ztat może działać w tle, a następnie spróbuj ponownie";
 "Fan value" = "Wartość wentylatora";
 "Turn off fan" = "Wyłączyć wentylator";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Zamierzasz wyłączyć wentylator. To nie jest zalecana czynność, która może spowodować uszkodzenie komputera Mac. Czy na pewno chcesz to zrobić?";

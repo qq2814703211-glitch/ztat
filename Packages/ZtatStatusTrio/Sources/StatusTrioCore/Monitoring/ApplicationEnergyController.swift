@@ -8,7 +8,7 @@ final class ApplicationEnergyController: ObservableObject {
     @Published private(set) var ranking = ApplicationEnergyRanking()
     private let reader: Reader
     private let applications: @MainActor () -> [EnergyApplication]
-    private static let queue = DispatchQueue(label: "com.lingsmbp.StatusTrio.application-energy", qos: .utility)
+    private static let queue = DispatchQueue(label: "dev.ztat.app.application-energy", qos: .utility)
     private var previous: ApplicationEnergySnapshot?
     private var monitorsInBackground = false
     private(set) var backgroundInterval: Duration

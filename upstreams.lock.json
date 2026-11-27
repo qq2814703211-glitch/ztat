@@ -3,7 +3,7 @@
   "project": "ztat",
   "bundleIdentifier": "dev.ztat.app",
   "license": "GPL-3.0-or-later",
-  "lastUpdated": "2026-11-25",
+  "lastUpdated": "2026-11-27",
   "upstreams": {
     "vorssaint-utils": {
       "url": "https://github.com/vorssaint/vorssaint-utils.git",
@@ -23,13 +23,28 @@
         "connectedDevices",
         "fanControl",
         "keepAwake",
+        "uninstaller",
+        "notch",
+        "notchCalendar",
+        "notchNotifications",
+        "notchGestures",
+        "notchTimer",
+        "notchAccessories",
+        "notchLyrics",
+        "notchQueue",
+        "notchLiveEqualizer",
+        "notchDownloads",
+        "notchAgents",
+        "notchWatch",
+        "notchMascot",
         "standaloneMenuBarItem"
       ],
       "ztatPatches": [
         "Rebrand identity/defaults/trademarks per upstream TRADEMARKS.md (no Vorssaint name/logo/update feed)",
         "Disable standalone Vorssaint NSStatusItem and metricStatusItems (hosted inside ZtatHubPanel via ZtatVorssaintHost)",
-        "Remove overlapping monitor*, fanControl, and keepAwake panel tabs (delegated to ZtatStats & ZtatPowerGuard)",
-        "Route Dynamic Island Keep-Awake strip & toggles to ZtatPowerGuard",
+        "Remove overlapping monitor*, fanControl, keepAwake, uninstaller, and all 13 notch* features (delegated to ZtatStats, ZtatPowerGuard, ZtatCleaner, and ZtatIsland)",
+        "Bridge CommandBar & Toolbox uninstaller shortcuts directly to ZtatCleaner via Notification.Name.ztatOpenAppUninstaller",
+        "Default screenshot post-capture preview/editor popup OFF with silent auto-copy fallback when defaultAction is .none",
         "Fix applicationWillTerminate singleton instantiation storm via loaded-service tracking",
         "Consolidate duplicate 0.8s pasteboard polling timers via ZtatCore.SharedPasteboardMonitor",
         "Debounce global UserDefaults.didChangeNotification scans in Permissions"
@@ -85,7 +100,8 @@
         "Gate Net/ConnectivityReader and Disk/SMARTReader when unused/closed",
         "Defer SystemKit system_profiler/diskutil hardware discovery off startup critical path",
         "Quantize Mini widget setValue redraws to formatted visual output and avoid double allocations",
-        "Zero-idle startup: no AppIcon fallback item, no auto-opening SettingsWindow when 0 metrics active"
+        "Zero-idle startup: no AppIcon fallback item, no auto-opening SettingsWindow when 0 metrics active",
+        "Fix notched display menu bar vertical alignment & clipping by using NSStatusBar.system.thickness (22pt) instead of mainMenu.menuBarHeight"
       ]
     },
     "budhold": {
@@ -106,6 +122,49 @@
         "Crash-safe UserDefaults persistence for disablesleep ownership and pre-blackout brightness",
         "Leak-free reusable IOPMAssertionDeclareUserActivity ID, zero orphaned caffeinate children, IOPMSleepSystem closed-lid enforcement",
         "Built-in display targeting (CGDisplayIsBuiltin) + 3-tier DisplayServices/CoreDisplay/IODisplayConnect fallback + Carbon hotkey recovery"
+      ]
+    },
+    "atoll": {
+      "url": "https://github.com/Ebullioscopic/Atoll.git",
+      "branch": "dev",
+      "commit": "7fd44e7a81dfb45db58a71669ba68d91bb1a565f",
+      "describe": "v2.3.3-dev-7fd44e7",
+      "license": "GPL-3.0",
+      "integrationMode": "pure-spm-port",
+      "targetPath": "Packages/ZtatIsland",
+      "excludedComponents": [
+        "Sparkle auto-updater (AtollUpdaterDelegate, SoftwareUpdater, CustomUpdaterViews, UpdateChannel)",
+        "LaunchAtLogin-Modern (unified in ZtatCore.ZtatLoginItemStore)",
+        "Standalone MenuBarExtra / StatusBarMenu (hosted inside ztat Hub & unified Settings)",
+        "Standalone Onboarding / Welcome modal & About/Donate/GitHub links",
+        "MemoryUsageMonitor (conflicted with ztat single-instance guard)",
+        "PerAppVolume (replaced by ZtatVorssaint AppVolumeMixer with >100% boost)",
+        "Default-on ExtensionXPCServiceHost / ExtensionRPCServer (guarded off for ad-hoc safety & zero idle TCP :9020)",
+        "Dead visualizer.metal, Pow, open-meteo, SwiftUIIntrospect, binary lottie-spm xcframework"
+      ],
+      "ztatPatches": [
+        "Pure SwiftPM + Apple CLT port with CAudioBridge ObjC++/C++20 target, vendored KeyboardShortcuts 2.3.0 (MIT, isolated to dev.ztat.app.island, #Preview guarded for CLT), pinned SwiftTerm 1.10.0 (no xcrun metal), source lottie-ios + LottieUIShim, vendored SkyLightOperator/OrderedSet/FullscreenAppDetector shims, flat Bundle.module image/audio/lottie resources, and 19 .lproj tables converted from Localizable.xcstrings",
+        "Isolate all 359 Defaults.Keys, @AppStorage, and UserDefaults into dedicated dev.ztat.app.island suite with one-time migration from com.Ebullioscopic.Atoll",
+        "Embed all Dynamic Island settings sections natively inside ztat's unified NavigationSplitView Settings window via ZtatIslandHost",
+        "Bridge CaffeinateManager directly to ZtatCore.ZtatPowerGuardRegistry (zero duplicate IOPMAssertions)",
+        "Eliminate BluetoothAudioManager wildcard DistributedNotificationCenter(name: nil) and gate polling/log-stream on active HUD prefs",
+        "Fix DownloadManager dropped Combine cancellable, lazy-init Calendar/Weather/Stats/SystemTimerBridge/DND monitors, guard macOS 14.2 CoreAudio Process Tap APIs, fix AudioTap 30Hz timer capture, and guarantee clean child-process & OSDUIHelper teardown on stop()"
+      ]
+    },
+    "pearcleaner": {
+      "url": "https://github.com/alienator88/Pearcleaner.git",
+      "branch": "main",
+      "commit": "7724df7111bff82ae243301cf701992ef05ecf19",
+      "describe": "v5.4.3",
+      "license": "Apache-2.0 with Commons Clause (GPL-3.0 incompatible — CLEAN-ROOM REIMPLEMENTATION ONLY)",
+      "integrationMode": "clean-room-feature-reference",
+      "targetPath": "Packages/ZtatCleaner",
+      "excludedComponents": [
+        "ZERO source files or assets copied from alienator88/Pearcleaner due to Commons Clause incompatibility with GPL-3.0-or-later"
+      ],
+      "ztatPatches": [
+        "Clean-room GPL-3.0-or-later implementation in Packages/ZtatCleaner covering Deep App Uninstaller (List/Grid, 13 categories, 3-tier sensitivity, 1-click Reset App, wrapped iOS/Web/Steam/Brew/MAS badges, TCC viewer, export & ditto archive), Orphaned/Zombie Files (22 paths + Exclude/Link-to-App), Pure-Swift Mach-O 32/64-bit App Lipo & .lproj Language Pruner, 26-toolchain Developer Cleaner + IDE Orphan Workspaces + Pip Manager, Public-API PKG/Receipts Inspector, 18-category Plugins Manager, Launch Services Manager, 7-filter File Search, Reversible Trash-Bundle Delete History, and opt-in zero-idle in-process Trash Sentinel",
+        "Isolated UserDefaults suite dev.ztat.app.cleaner, hard-protected system roots / ztat bundle / Git source repositories, native Finder Services ('Uninstall with ztat') & ztat:// URL scheme, replacing Vorssaint's basic .uninstaller"
       ]
     }
   }

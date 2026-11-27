@@ -579,17 +579,15 @@ struct NotchSettings: View {
                 let brightnessAvailable = AppFeature.brightness.isAvailable && brightnessControlEnabled
                 let keyboardLightAvailable = AppFeature.brightness.isAvailable && BrightnessService.keyboardLightIsSupported
                 let microphoneAvailable = AppFeature.micMute.isAvailable
-                // A Mac without a battery has no battery notices, so that card
-                // is left out rather than shown waiting for Power.
-                let hasBattery = PowerSampler.hasInternalBattery
-                let batteryAvailable = AppFeature.monitorPower.isAvailable
-                let accessoriesAvailable = AppFeature.notchAccessories.isAvailable && AppFeature.monitorPower.isAvailable
+                // ZTAT-PATCH: Battery monitoring is owned by StatusTrio/ZtatStats, while Bluetooth accessories
+                // work independently via NotchAccessorySupport without requiring Vorssaint's excluded monitorPower.
+                let accessoriesAvailable = AppFeature.notchAccessories.isAvailable
                 let clipboardAvailable = AppFeature.clipboardHistory.isAvailable && clipboardHistoryEnabled
                     && NotchSupport.modules().contains(.clipboard)
                 let capturesAvailable = AppFeature.screenshot.isAvailable && NotchSupport.modules().contains(.captures)
                 let musicAvailable = NotchSupport.modules().contains(.music)
                 let reserves = ![volumeAvailable, brightnessAvailable, keyboardLightAvailable, microphoneAvailable,
-                                 batteryAvailable || !hasBattery, accessoriesAvailable, clipboardAvailable, capturesAvailable,
+                                 accessoriesAvailable, clipboardAvailable, capturesAvailable,
                                  musicAvailable].allSatisfy { $0 }
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 116), spacing: 10)], spacing: 10) {
                     toggleCard(text.volume, symbol: "speaker.wave.2", value: $volume, available: volumeAvailable,
@@ -613,17 +611,12 @@ struct NotchSettings: View {
                     toggleCard(l10n.s.mixerInputTitle, symbol: "mic", value: $microphone, available: microphoneAvailable,
                                reason: AppFeature.micMute.enableReason(l10n), reservesReason: reserves,
                                unavailableAction: { AppFeature.micMute.showInFeatures() })
-                    if hasBattery {
-                        toggleCard(text.battery, symbol: "battery.75percent", value: $battery, available: batteryAvailable,
-                                   reason: AppFeature.monitorPower.enableReason(l10n), reservesReason: reserves,
-                                   unavailableAction: { AppFeature.monitorPower.showInFeatures() })
-                    }
                     toggleCard(FeatureStrings.notchActivities(l10n.language).accessories, symbol: "headphones", value: $accessoriesEnabled,
                               available: accessoriesAvailable,
-                              reason: (AppFeature.monitorPower.isAvailable ? AppFeature.notchAccessories : .monitorPower).enableReason(l10n),
+                              reason: AppFeature.notchAccessories.enableReason(l10n),
                               reservesReason: reserves,
                               unavailableAction: {
-                                  (AppFeature.monitorPower.isAvailable ? AppFeature.notchAccessories : .monitorPower).showInFeatures()
+                                  AppFeature.notchAccessories.showInFeatures()
                               })
                     toggleCard(FeatureStrings.clipboard(l10n.language).title, symbol: "doc.on.clipboard", value: $clipboard,
                                available: clipboardAvailable, reason: clipboardFeedbackReason, reservesReason: reserves,
@@ -730,8 +723,6 @@ struct NotchSettings: View {
             SettingsCard(title: editor.destinations) {
                 destination(text.panel, symbol: "bubble.middle.top", value: $appPanel)
                 Text(editor.appPanelHint).font(.caption).foregroundStyle(.secondary)
-                switchRow("menubar.rectangle", editor.hideMenuBarIcon, caption: editor.hideMenuBarIconHint,
-                          isOn: $hidesMenuBarIcon)
                 destination(text.tools, symbol: NotchModule.tools.symbol, value: $quickPanel, available: AppFeature.quickLauncher.isAvailable)
                 destination(FeatureStrings.clipboard(l10n.language).title, symbol: "doc.on.clipboard", value: $clipboardWindow, available: AppFeature.clipboardHistory.isAvailable)
                 destination(text.files, symbol: "tray.full", value: $shelfWindow, available: AppFeature.shelf.isAvailable)

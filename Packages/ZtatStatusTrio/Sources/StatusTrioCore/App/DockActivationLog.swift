@@ -2,7 +2,7 @@ import AppKit
 import os
 
 let dockActivationLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "DockActivation"
 )
 

@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "حذف ابزار کمکی فن"; // gemma4:31b
 "Approve in System Settings ▸ Login Items" = "در تنظیمات سیستم ▸ موارد ورود تایید کنید"; // gemma4:31b
 "Fan helper needs your approval" = "ابزار کمکی فن به تأیید شما نیاز دارد"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "برای کنترل فن‌ها، Stats را در تنظیمات سیستم ▸ موارد ورود فعال کنید.";
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "برای کنترل فن‌ها، ztat را در تنظیمات سیستم ▸ موارد ورود فعال کنید.";
 "Open Login Items" = "باز کردن موارد ورود";
 "Could not enable the fan helper" = "امکان فعال‌سازی ابزار کمکی فن وجود نداشت";
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "تنظیمات سیستم ▸ موارد ورود را باز کنید، مطمئن شوید که Stats در پس‌زمینه مجاز است، سپس دوباره تلاش کنید.";
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "تنظیمات سیستم ▸ موارد ورود را باز کنید، مطمئن شوید که ztat در پس‌زمینه مجاز است، سپس دوباره تلاش کنید.";
 "Fan value" = "مقدار فن"; // translategemma:4b
 "Turn off fan" = "خاموش کردن فن"; // gemma4:31b
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "شما قصد دارید فن را خاموش کنید. این اقدام توصیه نمی‌شود و می‌تواند به Mac شما آسیب برساند، آیا مطمئن هستید که می‌خواهید این کار را انجام دهید؟"; // gemma4:31b

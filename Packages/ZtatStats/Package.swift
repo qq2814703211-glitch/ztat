@@ -146,6 +146,7 @@ let package = Package(
             name: "ZtatStatsHost",
             dependencies: [
                 .product(name: "ZtatCore", package: "ZtatCore"),
+                "CStatsHardware",
                 "StatsKit",
                 "StatsCPU",
                 "StatsGPU",
@@ -163,7 +164,15 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("Combine"),
-                .linkedFramework("UserNotifications")
+                .linkedFramework("UserNotifications"),
+                .linkedFramework("Metal"),
+                .linkedFramework("IOKit"),
+                .linkedFramework("CoreAudio"),
+                .linkedFramework("CoreWLAN"),
+                .linkedFramework("IOBluetooth"),
+                .linkedFramework("DiskArbitration"),
+                .linkedFramework("Security"),
+                .linkedFramework("Carbon")
             ]
         )
     ]

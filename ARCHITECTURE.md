@@ -1,34 +1,34 @@
 # `ztat` 系统架构与去重优化设计
 
-`ztat` 是一款基于 `vorssaint-utils` 深度二次开发、整合 `status-trio`、`exelban/stats` 以及洁净室重构的 `ZtatPowerGuard`（吸收 `budhold` 核心交互理念）的统一 macOS 原生菜单栏工具箱。
+`ztat` 是一款基于 `vorssaint-utils` 深度二次开发、整合 `status-trio`、`exelban/stats`、`Ebullioscopic/Atoll`（原生灵动岛 `ZtatIsland`）以及洁净室重构的 `ZtatPowerGuard`（吸收 `budhold` 核心交互理念）的统一 macOS 原生菜单栏工具箱。
 
 ---
 
 ## 1. 模块依赖拓扑
 
 ```text
-                        ┌────────────────────────────────────┐
-                        │           Sources/ZtatApp          │
-                        │  统一入口 · Liquid Glass 中心面板   │
-                        │  统一设置窗口 · ztat 品牌与签名      │
-                        └──┬─────────┬──────────┬─────────┬──┘
-                           │         │          │         │
-          ┌────────────────▼─┐ ┌─────▼──────┐ ┌─▼───────┐ ┌▼──────────────────┐
-          │ ZtatStatusTrio   │ │ ZtatStats  │ │ Ztat    │ │ ZtatVorssaint     │
-          │ (Swift 6)        │ │ (Swift 5)  │ │ Power   │ │ (Swift 5.9)       │
-          │ 唯一主菜单栏图标  │ │ 硬件监控   │ │ Guard   │ │ 去重后的全能工具箱 │
-          │ 原生毛玻璃弹层    │ │ 菜单栏指标 │ │ (Swift6)│ │ 混音/窗口/灵动岛等 │
-          │ Wi-Fi/BT/音频/电 │ │ 纯SPM无DB  │ │ 保活/黑屏│ │ 无独立菜单栏图标   │
-          └────────┬─────────┘ └─────┬──────┘ └─┬───────┘ └─────────┬─────────┘
-                   │                 │          │                   │
-                   └─────────────────┴────┬─────┴───────────────────┘
-                                          ▼
-                                 ┌────────────────┐
-                                 │    ZtatCore    │
-                                 │ 身份/事件总线   │
-                                 │ 共享剪贴板轮询  │
-                                 │ 保活桥接协议    │
-                                 └────────────────┘
+                        ┌──────────────────────────────────────────────┐
+                        │               Sources/ZtatApp                │
+                        │      统一入口 · Liquid Glass 中心面板        │
+                        │      统一设置窗口 · ztat 品牌与签名          │
+                        └──┬─────────┬──────────┬──────────┬────────┬──┘
+                           │         │          │          │        │
+        ┌──────────────────▼┐ ┌──────▼─────┐ ┌──▼──────┐ ┌─▼──────┐ ┌▼────────────────┐
+        │ ZtatStatusTrio    │ │ ZtatStats  │ │ Ztat    │ │ Ztat   │ │ ZtatVorssaint   │
+        │ (Swift 6)         │ │ (Swift 5)  │ │ Power   │ │ Island │ │ (Swift 5.9)     │
+        │ 唯一主菜单栏图标   │ │ 硬件监控   │ │ Guard   │ │ (Atoll)│ │ 去重全能工具箱  │
+        │ 原生毛玻璃弹层     │ │ 菜单栏指标 │ │ (Swift6)│ │ 灵动岛 │ │ 混音/窗口/键鼠等│
+        │ Wi-Fi/BT/音频/电  │ │ 纯SPM无DB  │ │ 保活黑屏│ │ 锁屏等 │ │ 无独立菜单栏图标│
+        └────────┬──────────┘ └──────┬─────┘ └──┬──────┘ └─┬──────┘ └────────┬────────┘
+                 │                   │          │          │                 │
+                 └───────────────────┴──────────┴────┬─────┴─────────────────┘
+                                                     ▼
+                                            ┌────────────────┐
+                                            │    ZtatCore    │
+                                            │ 身份/事件总线   │
+                                            │ 共享剪贴板轮询  │
+                                            │ 保活桥接协议    │
+                                            └────────────────┘
 
 Companion CLI: Packages/ZtatPowerGuard/Sources/ZtatPowerGuardCLI (ztat-hold) ──▶ ZtatPowerGuard
 ```
@@ -46,9 +46,10 @@ Companion CLI: Packages/ZtatPowerGuard/Sources/ZtatPowerGuardCLI (ztat-hold) ─
 | **窗口布局 / App Switcher / Dock 预览与点击 / 防误退 `⌘Q`/`⌘W`** | Vorssaint `.windowsDock` | **保留 `ZtatVorssaint`** | 内嵌于统一面板「工具箱」页 |
 | **键鼠增强（平滑滚动/侧键/中键/SuperKey/文本片段/防抖）** | Vorssaint `.mouseKeyboard` | **保留 `ZtatVorssaint`** | 内嵌于统一面板「工具箱」页 |
 | **剪贴板历史 / 纯文本粘贴 / 文件搁板 / Finder 增强 / URL 清理 / DMG 安装器** | Vorssaint `.clipboardFiles` | **保留 `ZtatVorssaint`**（合并重复剪贴板定时器） | 内嵌于统一面板「工具箱」页（剪贴板预览条默认关闭，可特别开启） |
-| **灵动岛 Dynamic Island（音乐/歌词/通知/日历/计时器/AI Agents 监控/下载/相机/便签）** | Vorssaint `.dynamicIsland` | **保留 `ZtatVorssaint`**（并移除重叠的系统监控卡片，保活条接入 `ZtatPowerGuard`） | 仅屏幕刘海交互，无菜单栏图标 |
+| **灵动岛 Dynamic Island（媒体/歌词/实时活动/锁屏小组件/下拉终端/计时器/暂存架/蓝牙 HUD/待机动画）** | Vorssaint `.dynamicIsland`（13 个 `notch*` 特性） | **完全替换为 `ZtatIsland`**（纯 SPM 移植版 `Ebullioscopic/Atoll`，独立配置套件 `dev.ztat.app.island`，保活桥接 `ZtatPowerGuard`，锁屏小组件与全功能设置原生内嵌） | 仅屏幕刘海/锁屏交互，无额外菜单栏图标；可在统一面板与设置中控制 |
 | **截屏标注 / 录屏+GIF / OCR / 取色器 / 媒体工具 / 命令栏 / 轮盘菜单 / 清洁模式** | Vorssaint `.tools` | **保留 `ZtatVorssaint`** | 内嵌于统一面板「工具箱」页 |
-| **应用更新 / 垃圾清理 / 应用卸载 / Homebrew / 端口管理 / 进程查杀** | Vorssaint `.tools` | **保留 `ZtatVorssaint`** | 内嵌于统一面板「工具箱」页 |
+| **应用更新 / 定时垃圾清理 / Homebrew / 端口管理 / 进程查杀** | Vorssaint `.tools` | **保留 `ZtatVorssaint`**（与 `ZtatCleaner` 深度卸载互补） | 内嵌于统一面板「工具箱」页 |
+| **应用深度卸载 / 孤立残留 / Mach-O 架构瘦身 / 语言包裁剪 / 开发环境 / PKG / 插件 / 后台服务 / 文件搜索 / 废纸篓哨兵** | Vorssaint 基础 `.uninstaller`（单应用拖放） | **完全替换为 `ZtatCleaner`**（洁净室重构，吸收 `Pearcleaner` 全套工作流，独立配置套件 `dev.ztat.app.cleaner`，CommandBar/工具箱/Finder Services/`ztat://` 原生桥接） | **无独立菜单栏图标**，内嵌于统一设置侧栏「应用清理与卸载」及菜单栏右键快捷入口 |
 | **XDR 额外亮度 / 休眠断蓝牙** | Vorssaint `extraBrightness`, `bluetoothSleep` | **保留 `ZtatVorssaint`** | 内嵌于统一面板「工具箱」页 |
 
 ---
@@ -90,5 +91,14 @@ Companion CLI: Packages/ZtatPowerGuard/Sources/ZtatPowerGuardCLI (ztat-hold) ─
 14. **零泄漏断言与崩溃安全恢复**：复用并正确释放 `IOPMAssertionDeclareUserActivity` ID；不再派生易成孤儿进程的 `caffeinate`；落盘记录 `disablesleep` 归属与熄屏前亮度，崩溃重启后自动恢复；采用 `#uid` 最小权限 sudoers（仅放行 `disablesleep 0/1`）+ `visudo -cf` 校验；低电量/到期时调用 `IOPMSleepSystem` 重试确保合盖真休眠；内建屏精确锁定（`CGDisplayIsBuiltin`）+ 三层亮度 API 降级 + Carbon 热键/亮度键无障碍免授权恢复。
 
 ### Vorssaint 精简与内存/CPU 优化 (`Packages/ZtatVorssaint`)
-15. **彻底裁剪重叠重型模块**：移除 `.monitor` 全部 8 个监控特性、`SMCClient`、`FanControlHelper` root daemon、`MaxCapacityProbe`、`PeripheralBatterySampler`、`MenuBarRenderer` 与 15 个独立菜单栏指标项，大幅缩减二进制体积与常驻内存。
+15. **彻底裁剪重叠重型模块**：移除 `.monitor` 全部 8 个监控特性、`.dynamicIsland` 全部 13 个 `notch*` 特性、`SMCClient`、`FanControlHelper` root daemon、`MaxCapacityProbe`、`PeripheralBatterySampler`、`MenuBarRenderer` 与 15 个独立菜单栏指标项，大幅缩减二进制体积与常驻内存。
 16. **延迟加载与事件收敛**：维护已启动服务登记表，消除 `applicationWillTerminate` 退出时凭空构造 22 个未启用单例；移除启动时急加载的 `MenuPanelView`；通过 `ZtatCore.SharedPasteboardMonitor` 合并 `ClipboardHistoryService` 与 `URLCleanerService` 重复的 0.8s 剪贴板定时器；节流 `Permissions.swift` 的全局 `UserDefaults.didChangeNotification` 扫描。
+
+### ZtatIsland 原生灵动岛引擎与性能优化 (`Packages/ZtatIsland`)
+17. **纯 Apple CLT / SwiftPM 移植与零冲突隔离**：独立 `CAudioBridge` ObjC++/C++20 频谱引擎、锁定 `SwiftTerm 1.10.0`（绕过 Xcode-only `xcrun metal` 阻塞）、源码编译 `lottie-ios` + 轻量 `LottieUIShim`、内联 `SkyLightOperator`/`OrderedSet`/`ZtatFullscreenDetector` 垫片、将 `Localizable.xcstrings`（1,603 词条/19 语种）无损转为 `.lproj` 表，并将 359 项 `Defaults.Keys` 隔离至独立套件 `dev.ztat.app.island`。
+18. **空闲事件与子进程彻底收敛**：消除 `BluetoothAudioManager` 的全系统通配符 `DistributedNotificationCenter(name: nil)` 与无条件 3s 轮询；修复 `DownloadManager` 丢失的 Combine 订阅；延迟初始化日历/天气/内嵌监控/系统计时器/勿扰监听；修复 `AudioTap` 30Hz 定时器强引用；停止空闲状态 1Hz 悬停轮询；`stop()` 时同步恢复 `OSDUIHelper` 并精准终止所有子进程（`mediaremote-adapter.pl` / `log stream`），杜绝孤儿进程与系统 OSD 冻结。
+19. **修复 Stats 菜单栏高度对齐**：将 `StatsKit/constants.swift` 的 `Constants.Widget.height` 从 `NSApp.mainMenu?.menuBarHeight`（刘海屏 33pt）修正为 `NSStatusBar.system.thickness`（22pt），解决加入标准主菜单后状态栏监控顶部拉高、底部裁切的问题。
+
+### ZtatCleaner 原生应用卸载与深度清理套件 (`Packages/ZtatCleaner`)
+20. **零空闲进程内哨兵与纯公开 API 架构**：废纸篓哨兵（`TrashSentinelMonitor`）采用进程内 CoreServices `FSEventStream` 且默认关闭（零空闲 CPU/内存开销，无需额外常驻 LaunchAgent）；PKG 收据管理器采用公开 `/var/db/receipts` + `/usr/bin/lsbom` 解析（零私有框架链接）；架构瘦身采用纯 Swift Mach-O 32/64 位 FAT 解析与原子切片替换（无需 Xcode `lipo`）。
+21. **多层路径安全围栏与可逆废纸篓打包**：`SafePathGuard` 硬拦截全部系统根目录、用户主目录、核心 Library 根目录、`ztat` 应用本体、用户配置的扫描根目录以及 `.git` 源码仓库；全部清理操作打包移入带时间戳的废纸篓目录并保留最近 10 次可一键还原的持久化历史记录；`CleanerSettingsStore` 严格隔离于 `dev.ztat.app.cleaner`。

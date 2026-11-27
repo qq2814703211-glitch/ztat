@@ -33,14 +33,16 @@ You can use a combination of any of the variables.
 </ul>
 """
 
-internal class Settings: NSStackView, Settings_v {
+internal class Settings: NSStackView, Settings_v, NSTextFieldDelegate {
     private var updateIntervalValue: Int = 1
     private var updateTopIntervalValue: Int = 1
     private var numberOfProcesses: Int = 8
     private var selectedGPU: String
     private var showTypeValue: Bool = false
+    private var textValue: String = "$usage"
     
     private let title: String
+    private let textWidgetHelpPanel: HelpHUD = HelpHUD(textWidgetHelp)
     
     public var selectedGPUHandler: (String) -> Void = {_ in }
     public var callback: (() -> Void) = {}
@@ -57,6 +59,7 @@ internal class Settings: NSStackView, Settings_v {
         self.updateTopIntervalValue = Store.shared.int(key: "\(self.title)_updateTopInterval", defaultValue: self.updateTopIntervalValue)
         self.numberOfProcesses = Store.shared.int(key: "\(self.title)_processes", defaultValue: self.numberOfProcesses)
         self.showTypeValue = Store.shared.bool(key: "\(self.title)_showType", defaultValue: self.showTypeValue)
+        self.textValue = Store.shared.string(key: "\(self.title)_textWidgetValue", defaultValue: self.textValue)
         
         super.init(frame: NSRect(x: 0, y: 0, width: 0, height: 0))
         
@@ -118,6 +121,34 @@ internal class Settings: NSStackView, Settings_v {
         self.addArrangedSubview(PreferencesSection([
             PreferencesRow(localizedString("GPU to show"), component: self.button!)
         ]))
+
+        if widgets.contains(where: { $0 == .text }) {
+            let field = NSTextField()
+            field.identifier = NSUserInterfaceItemIdentifier("text")
+            field.widthAnchor.constraint(equalToConstant: 250).isActive = true
+            field.font = NSFont.systemFont(ofSize: 12, weight: .regular)
+            field.textColor = .textColor
+            field.isEditable = true
+            field.isSelectable = true
+            field.usesSingleLineMode = true
+            field.maximumNumberOfLines = 1
+            field.focusRingType = .none
+            field.stringValue = self.textValue
+            field.placeholderString = localizedString("This will be visible in the text widget")
+            field.delegate = self
+            self.addArrangedSubview(PreferencesSection([
+                PreferencesRow(localizedString("Text widget value"), component: field) { [weak self] in
+                    self?.textWidgetHelpPanel.show()
+                }
+            ]))
+        }
+    }
+
+    func controlTextDidChange(_ notification: Notification) {
+        if let field = notification.object as? NSTextField, field.identifier == NSUserInterfaceItemIdentifier("text") {
+            self.textValue = field.stringValue
+            Store.shared.set(key: "\(self.title)_textWidgetValue", value: self.textValue)
+        }
     }
     
     internal func setList(_ gpus: GPUs) {

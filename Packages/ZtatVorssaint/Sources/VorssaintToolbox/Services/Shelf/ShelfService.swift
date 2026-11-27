@@ -250,9 +250,9 @@ final class ShelfService: ObservableObject {
     private var promiseTransfers: [UUID: (target: UUID?, transfer: ShelfFilePromiseTransfer, additions: [Item])] = [:]
 
     private let tempDir: URL = {
-        let id = Bundle.main.bundleIdentifier ?? "com.vorssaint.utils"
+        let id = Bundle.main.bundleIdentifier ?? "dev.ztat.app"
         let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("VorssaintShelf", isDirectory: true)
+            .appendingPathComponent("ZtatShelf", isDirectory: true)
             .appendingPathComponent(id, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
@@ -268,12 +268,12 @@ final class ShelfService: ObservableObject {
     /// Writes coalesce per mutation cycle already; the JSON encode itself
     /// also stays off the main thread (a full shelf of large texts is real
     /// work), serialized so blobs land in mutation order.
-    private static let persistQueue = DispatchQueue(label: "com.vorssaint.utils.shelf-persist",
+    private static let persistQueue = DispatchQueue(label: "dev.ztat.toolbox.utils.shelf-persist",
                                                     qos: .utility)
 
     // File providers may block for seconds. Keep all drag metadata reads off
     // the main thread and bound the number of outstanding reads on slow volumes.
-    private static let dragFileQueue = DispatchQueue(label: "com.vorssaint.utils.shelf-drag-files",
+    private static let dragFileQueue = DispatchQueue(label: "dev.ztat.toolbox.utils.shelf-drag-files",
                                                      qos: .userInitiated)
 
     private var persistScheduled = false
@@ -2335,7 +2335,7 @@ final class ShelfService: ObservableObject {
 
     private func cleanLegacyTemporaryFiles() {
         let legacyDir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("VorssaintShelf", isDirectory: true)
+            .appendingPathComponent("ZtatShelf", isDirectory: true)
         guard legacyDir != tempDir,
               let entries = try? FileManager.default.contentsOfDirectory(at: legacyDir,
                                                                          includingPropertiesForKeys: nil)

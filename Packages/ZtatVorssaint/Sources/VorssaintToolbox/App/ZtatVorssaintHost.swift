@@ -37,13 +37,21 @@ public final class ZtatVorssaintHost: ObservableObject {
     public static let shared = ZtatVorssaintHost()
 
     @Published public private(set) var navigationRevision: Int = 0
+    @Published public private(set) var activeToolboxItemID: String = "page:features"
 
     private var isStarted = false
     private var statusController: StatusItemController?
     private var cancellables = Set<AnyCancellable>()
+    private var notificationObservers: [NSObjectProtocol] = []
     private var activeOpenSettingsHandler: (() -> Void)?
 
     private init() {}
+
+    /// MUST be called at process startup BEFORE NSApplication launches so detached cleanup helpers
+    /// (such as `--mouse-acceleration-cleanup`) restore state and exit cleanly without spawning a rogue GUI instance.
+    public static func handleStartupHelperArgumentsIfNeeded() {
+        MouseAccelerationGuard.runIfRequestedAndExit()
+    }
 
     /// Boot enabled non-overlapping toolbox services lazily. Does NOT create standalone status items.
     public func start() {
@@ -51,16 +59,19 @@ public final class ZtatVorssaintHost: ObservableObject {
         isStarted = true
 
         Defaults.register()
+        syncLanguageFromUnifiedStore()
+        syncAppearanceFromUnifiedStore()
         AppAppearanceController.shared.apply()
         GlobalShortcut.startObservingKeyboardLayout()
         Self.boundAccessibilityWaits()
+        SpacesOrderHold.recoverIfNeeded()
         _ = AssistiveKeyboard.isRunning
 
         DispatchQueue.global(qos: .utility).async {
             RecorderGIFWorkspace.sweep()
         }
 
-        // Prepare clean first-run toolbox availability without launching Vorssaint's standalone onboarding modal.
+        // Prepare clean first-run toolbox availability without launching standalone onboarding modal.
         let defaults = UserDefaults.standard
         if !defaults.bool(forKey: DefaultsKey.hasOnboarded) {
             FeaturePreset.prepareFirstRunAvailability(in: defaults)
@@ -79,6 +90,20 @@ public final class ZtatVorssaintHost: ObservableObject {
         }
 
         HorizontalWheelScrolling.install()
+
+        // Wire menu bar docked Shelf anchor to ztat's primary menu bar status item.
+        ShelfService.statusItemFrameProvider = {
+            if Thread.isMainThread {
+                return MainActor.assumeIsolated {
+                    ZtatHostBridge.shared.primaryStatusItemFrame()
+                }
+            }
+            return DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    ZtatHostBridge.shared.primaryStatusItemFrame()
+                }
+            }
+        }
 
         // StatusItemController creates ZERO main or metric status items in ztat;
         // it only manages the strictly opt-in Clipboard Preview menu bar item (off by default).
@@ -105,7 +130,7 @@ public final class ZtatVorssaintHost: ObservableObject {
                     .keyboardDebounce, .textSnippets, .superKey, .quitWindowProtection,
                     .switcher, .dockPreview, .dockClick, .windowMaximizer, .windowLayout,
                     .autoQuit, .spacesOrder, .finderCutPaste, .finderRename, .shelf,
-                    .mixer, .brightness, .radialMenu, .notch, .notchNotifications,
+                    .mixer, .musicBlock, .brightness, .radialMenu,
                 ])
             }
             .store(in: &cancellables)
@@ -128,6 +153,16 @@ public final class ZtatVorssaintHost: ObservableObject {
             }
             .store(in: &cancellables)
 
+        // Refresh live TCC state whenever the non-activating Hub panel opens so permission badges never lag.
+        NotificationCenter.default.publisher(for: .ztatHubPanelVisibilityDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { note in
+                if (note.userInfo?["visible"] as? Bool) == true {
+                    Permissions.shared.refreshActivePermissions()
+                }
+            }
+            .store(in: &cancellables)
+
         FeatureRuntime.shared.$revision
             .dropFirst()
             .receive(on: DispatchQueue.main)
@@ -139,6 +174,35 @@ public final class ZtatVorssaintHost: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.navigationRevision &+= 1 }
             .store(in: &cancellables)
+
+        // Two-way sidebar selection sync: publish activeToolboxItemID whenever SettingsRouter navigates internally.
+        SettingsRouter.shared.$requestID
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                let resolved = self.currentSelectedToolboxItemID()
+                if self.activeToolboxItemID != resolved {
+                    self.activeToolboxItemID = resolved
+                }
+            }
+            .store(in: &cancellables)
+
+        let nc = NotificationCenter.default
+        notificationObservers.append(
+            nc.addObserver(forName: .ztatLanguageDidChange, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.syncLanguageFromUnifiedStore()
+                }
+            }
+        )
+        notificationObservers.append(
+            nc.addObserver(forName: .ztatAppearanceDidChange, object: nil, queue: .main) { [weak self] _ in
+                Task { @MainActor [weak self] in
+                    self?.syncAppearanceFromUnifiedStore()
+                }
+            }
+        )
     }
 
     /// Stop ONLY services that were actually started during this session.
@@ -146,21 +210,50 @@ public final class ZtatVorssaintHost: ObservableObject {
         guard isStarted else { return }
         isStarted = false
 
+        for obs in notificationObservers {
+            NotificationCenter.default.removeObserver(obs)
+        }
+        notificationObservers.removeAll()
         cancellables.removeAll()
         statusController?.stop()
         statusController = nil
         FeatureRuntime.shared.stopStartedServices()
     }
 
+    private func syncLanguageFromUnifiedStore() {
+        let pref = ZtatLocalizationStore.shared.preference
+        let target: AppLanguage
+        if let code = pref.toolboxLanguageCode, let lang = AppLanguage(rawValue: code) {
+            target = lang
+        } else {
+            target = .systemDefault
+        }
+        if L10n.shared.language != target {
+            L10n.shared.language = target
+        }
+    }
+
+    private func syncAppearanceFromUnifiedStore() {
+        let target: AppAppearance
+        switch ZtatAppearanceStore.shared.appearance {
+        case .system: target = .system
+        case .light: target = .light
+        case .dark: target = .dark
+        }
+        if AppAppearanceController.shared.appearance != target {
+            AppAppearanceController.shared.appearance = target
+        }
+    }
+
+    /// Dedicated Permissions & Privacy Portal hosted directly under ztat's Core Settings sidebar.
+    public func makePermissionsPortalView() -> AnyView {
+        AnyView(ZtatPermissionsPortalView())
+    }
+
     /// Reconcile opt-in auxiliary UI if needed when app is reopened.
     public func handleReopen() {
         guard isStarted else { return }
         statusController?.reconcileOptInItems()
-        if AppFeature.notch.isAvailable,
-           UserDefaults.standard.bool(forKey: DefaultsKey.notchEnabled) {
-            FeatureRuntime.shared.registerStartedFeature(.notch)
-            NotchService.shared.syncWithPreferences()
-        }
     }
 
     /// Compact 356pt SwiftUI view hosted inside ztat's unified Liquid Glass Hub "工具箱" tab.
@@ -206,7 +299,7 @@ public final class ZtatVorssaintHost: ObservableObject {
             let mapped = section.items.map { item -> ZtatToolboxNavItem in
                 let title: String
                 if case .page(.general) = item.id {
-                    title = ZtatL10n.tr("工具箱偏好与权限", "Toolbox Preferences & Permissions")
+                    title = ZtatL10n.tr("浮窗玻璃材质", "Glass & Visual Effects")
                 } else {
                     title = item.title
                 }
@@ -288,16 +381,10 @@ public final class ZtatVorssaintHost: ObservableObject {
         )
     }
 
-    /// Internal bridge used by TrashAppWatcher and CommandBar to open the Uninstaller page
-    /// inside ztat's unified Settings window.
+    /// Internal bridge used by CommandBar and Toolbox shortcuts to open ztat's native App Uninstaller (`ZtatCleaner`).
     func openUninstaller(for appURL: URL, trashMove: UninstallerSupport.TrashMove? = nil) {
-        let uninstaller = AppUninstaller.shared
-        guard AppFeature.uninstaller.isAvailable,
-              uninstaller.select(appURL: appURL, trashMove: trashMove) || (trashMove == nil && uninstaller.isRemoving)
-        else { return }
-        FeatureRuntime.shared.registerStartedFeature(.uninstaller)
-        SettingsRouter.shared.page = .uninstaller
-        requestOpenSettings()
+        // ZTAT-PATCH: Route all app uninstallation requests natively to ZtatCleaner.
+        NotificationCenter.default.post(name: .ztatOpenAppUninstaller, object: appURL)
     }
 
     private static func boundAccessibilityWaits() {
@@ -459,7 +546,6 @@ private struct ZtatToolboxQuickToolsContent: View {
     @ObservedObject private var extraBrightness = ExtraBrightnessService.shared
     @ObservedObject private var mixer = AppVolumeMixer.shared
 
-    @AppStorage(DefaultsKey.notchEnabled) private var notchEnabled = false
     @AppStorage(DefaultsKey.extraBrightnessEnabled) private var extraBrightnessEnabled = false
     @AppStorage(DefaultsKey.extraBrightnessLevel) private var extraBrightnessLevel = 100
     @AppStorage(DefaultsKey.clipboardHistoryEnabled) private var clipboardEnabled = false
@@ -482,7 +568,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         active: false
                     ) {
                         ensureAvailable(.screenshot)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                             ScreenshotService.shared.capture()
                         }
                     }
@@ -496,7 +583,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         tint: .red
                     ) {
                         ensureAvailable(.screenRecorder)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                             ScreenRecorderService.shared.toggle()
                         }
                     }
@@ -507,7 +595,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         active: false
                     ) {
                         ensureAvailable(.screenOCR)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                             ScreenTextService.shared.capture()
                         }
                     }
@@ -518,7 +607,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         active: false
                     ) {
                         ensureAvailable(.colorPicker)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.14) {
                             ColorSamplerService.shared.pick()
                         }
                     }
@@ -530,7 +620,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         tint: .cyan
                     ) {
                         ensureAvailable(.cleaningMode)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
                             CleaningModeManager.shared.toggle()
                         }
                     }
@@ -541,7 +632,8 @@ private struct ZtatToolboxQuickToolsContent: View {
                         active: false
                     ) {
                         ensureAvailable(.commandBar)
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+                        ZtatHostBridge.shared.dismissHubPanel()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                             CommandBarService.shared.show()
                         }
                     }
@@ -637,38 +729,9 @@ private struct ZtatToolboxQuickToolsContent: View {
                 }
             }
 
-            // 4. Standout Toggles: Dynamic Island & XDR Extra Brightness
+            // 4. Standout Toggles: XDR Extra Brightness (Dynamic Island is owned natively by ZtatIsland)
             ZtatToolboxCard(title: ZtatL10n.tr("增强模式", "Enhancements")) {
                 VStack(spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "macbook")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(notchEnabled && AppFeature.notch.isAvailable ? Color.accentColor : .secondary)
-                            .frame(width: 18)
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(ZtatL10n.tr("灵动岛 (AI / 媒体 / 保活)", "Dynamic Island"))
-                                .font(.system(size: 11.5, weight: .medium))
-                            Text(ZtatL10n.tr("显示媒体控制、AI 用量与保活状态", "Media, AI agents & Power Guard"))
-                                .font(.system(size: 10))
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer(minLength: 4)
-                        Toggle("", isOn: Binding(
-                            get: { AppFeature.notch.isAvailable && notchEnabled },
-                            set: { on in
-                                if on { ensureAvailable(.notch) }
-                                notchEnabled = on
-                                FeatureRuntime.shared.registerStartedFeature(.notch)
-                                NotchService.shared.syncWithPreferences()
-                            }
-                        ))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                    }
-
-                    Divider().opacity(0.45)
-
                     VStack(spacing: 6) {
                         HStack(spacing: 8) {
                             Image(systemName: "sun.max.fill")
@@ -728,9 +791,9 @@ private struct ZtatToolboxQuickToolsContent: View {
             // 5. System Tools Shortcuts
             ZtatToolboxCard(title: ZtatL10n.tr("系统工具", "System Utilities")) {
                 LazyVGrid(columns: quickGridColumns, spacing: 6) {
-                    ZtatMiniLinkButton(symbol: "trash", title: ZtatL10n.tr("卸载器", "Uninstall")) {
-                        ensureAvailable(.uninstaller)
-                        onOpenSettingsPage(.uninstaller)
+                    ZtatMiniLinkButton(symbol: "trash", title: ZtatL10n.tr("应用卸载", "Uninstall")) {
+                        // ZTAT-PATCH: Open native ZtatCleaner App Uninstaller directly.
+                        NotificationCenter.default.post(name: .ztatOpenSettings, object: ZtatSettingsRoute.cleaner(sectionID: "apps"))
                     }
                     ZtatMiniLinkButton(symbol: "sparkles", title: ZtatL10n.tr("垃圾清理", "Cleaner")) {
                         ensureAvailable(.cleaner)
@@ -801,7 +864,6 @@ private struct ZtatToolboxQuickFeaturesContent: View {
     @AppStorage(DefaultsKey.focusFollowsMouseEnabled) private var focusFollowsMouseEnabled = false
     @AppStorage(DefaultsKey.quitProtectionQuitEnabled) private var quitProtectionEnabled = false
     @AppStorage(DefaultsKey.bluetoothSleepEnabled) private var bluetoothSleepEnabled = false
-    @AppStorage(DefaultsKey.notchEnabled) private var notchEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -824,7 +886,7 @@ private struct ZtatToolboxQuickFeaturesContent: View {
                 }
             }
 
-            ZtatToolboxCard(title: ZtatL10n.tr("剪贴板、灵动岛与外设", "Clipboard, Island & Display")) {
+            ZtatToolboxCard(title: ZtatL10n.tr("剪贴板、暂存架与外设", "Clipboard, Shelf & Display")) {
                 VStack(spacing: 6) {
                     quickToggleRow(symbol: "doc.on.clipboard", title: ZtatL10n.tr("剪贴板历史", "Clipboard History"),
                                    feature: .clipboardHistory, isOn: $clipboardEnabled, page: .clipboard)
@@ -834,9 +896,6 @@ private struct ZtatToolboxQuickFeaturesContent: View {
                     Divider().opacity(0.4)
                     quickToggleRow(symbol: "tray.full", title: ZtatL10n.tr("文件暂存架", "File Shelf"),
                                    feature: .shelf, isOn: $shelfEnabled, page: .shelf)
-                    Divider().opacity(0.4)
-                    quickToggleRow(symbol: "macbook", title: ZtatL10n.tr("灵动岛", "Dynamic Island"),
-                                   feature: .notch, isOn: $notchEnabled, page: .notch)
                     Divider().opacity(0.4)
                     quickToggleRow(symbol: "wave.3.right.circle", title: ZtatL10n.tr("休眠关闭蓝牙", "Bluetooth Sleep"),
                                    feature: .bluetoothSleep, isOn: $bluetoothSleepEnabled, page: .energy)
@@ -1069,6 +1128,108 @@ private struct ZtatMiniMixerRow: View {
                     .frame(width: 18, height: 18)
             }
             .buttonStyle(.plain)
+        }
+    }
+}
+
+// MARK: - Unified Permissions & Privacy Portal
+
+private struct ZtatPermissionsPortalView: View {
+    @ObservedObject private var l10n = L10n.shared
+    @ObservedObject private var ztatL10n = ZtatLocalizationStore.shared
+    @ObservedObject private var permissions = Permissions.shared
+
+    var body: some View {
+        let _ = ztatL10n.revision
+        let hub = FeatureStrings.hub(l10n.language)
+        let bundlePath = Bundle.main.bundlePath
+        let bundleID = Bundle.main.bundleIdentifier ?? ZtatBrand.bundleIdentifier
+        let isInApplications = bundlePath.hasPrefix("/Applications/")
+        let signDiag = Permissions.cachedCodeSigningDiagnostic
+
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(ZtatL10n.tr("权限与隐私", "Permissions & Privacy"))
+                        .font(.title2.bold())
+                    Text(ZtatL10n.tr(
+                        "统一管理 ztat（\(bundleID)）的 macOS 系统授权。所有权限均按需请求，不会在未启用对应工具时触发弹窗。",
+                        "Manage macOS privacy permissions for ztat (\(bundleID)) in one place. Permissions are requested only when you enable features that need them."
+                    ))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+
+                SettingsCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 8) {
+                            Image(systemName: isInApplications ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                                .foregroundStyle(isInApplications ? Color.green : Color.orange)
+                            Text(ZtatL10n.tr("当前运行位置：\(bundlePath)", "Running from: \(bundlePath)"))
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                        }
+                        HStack(spacing: 8) {
+                            Image(systemName: signDiag.isStableCertificate ? "lock.shield.fill" : "exclamationmark.shield.fill")
+                                .foregroundStyle(signDiag.isStableCertificate ? Color.green : Color.orange)
+                            if let auth = signDiag.authority, signDiag.isStableCertificate {
+                                Text(ZtatL10n.tr(
+                                    "代码签名：\(auth)（稳定证书签名，重启与版本更新可持久保留系统权限）",
+                                    "Code Signature: \(auth) (Stable certificate — TCC permissions persist across restarts & updates)"
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            } else {
+                                Text(ZtatL10n.tr(
+                                    "代码签名：临时 Ad-hoc 签名（每次更新编译可能导致录屏权限重置，请使用 ./scripts/build.sh 证书签名）",
+                                    "Code Signature: Ad-hoc (rebuilds may invalidate Screen Recording TCC; sign with a local certificate)"
+                                ))
+                                .font(.caption)
+                                .foregroundStyle(.orange)
+                            }
+                        }
+                        if !isInApplications {
+                            Text(ZtatL10n.tr(
+                                "建议仅从 /Applications/ztat.app 运行，避免系统隐私列表中出现多个同名 ztat 条目导致授权无效。",
+                                "Run ztat from /Applications/ztat.app to avoid duplicate entries in macOS Privacy & Security."
+                            ))
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Text(ZtatL10n.tr(
+                            "提示：macOS 在系统设置中开启“录屏与系统录音”后，当前运行进程需重启一次才能拿到新的系统录屏令牌。如开关已开但仍显示未授权，可先点击“重启 ztat 使权限生效”；若为旧签名残留，再点击对应权限的“重新开始”。",
+                            "Note: macOS caches Screen Recording tokens per process. After enabling Screen Recording in System Settings, click “Relaunch ztat” below once; if an older signature entry is stuck, click “Start Over” on that permission."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        HStack(spacing: 8) {
+                            Button(ZtatL10n.tr("刷新权限状态", "Refresh Status")) {
+                                permissions.refresh()
+                            }
+                            Button(ZtatL10n.tr("重启 ztat 使权限生效", "Relaunch ztat")) {
+                                permissions.relaunchApp()
+                            }
+                        }
+                        .controlSize(.small)
+                        .padding(.top, 2)
+                    }
+                }
+
+                SettingsCard {
+                    PermissionsPortalSections(hub: hub)
+                }
+            }
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(22)
+        }
+        .onAppear {
+            permissions.refresh()
         }
     }
 }

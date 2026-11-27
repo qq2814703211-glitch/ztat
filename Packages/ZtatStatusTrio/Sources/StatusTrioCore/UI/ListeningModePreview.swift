@@ -39,7 +39,7 @@ enum ListeningModePreview {
     /// The normal Settings preview and all release builds keep their usual rows.
     static var usesLayoutShowcase: Bool {
         #if DEBUG
-        Bundle.main.bundleIdentifier?.hasPrefix("com.lingsmbp.StatusTrio.dev.") == true
+        Bundle.main.bundleIdentifier?.hasPrefix("dev.ztat.app.dev.") == true
             && UserDefaults.standard.bool(forKey: "airPodsLayoutShowcase")
         #else
         false

@@ -17,7 +17,7 @@ final class BatteryDetailsController: ObservableObject {
     var powerSampling: PowerSamplingService?
     private var options = BatteryPowerDisplayOptions.default
     private var showsHighEnergyApps = false
-    private static let queue = DispatchQueue(label: "com.lingsmbp.StatusTrio.battery-details", qos: .utility)
+    private static let queue = DispatchQueue(label: "dev.ztat.app.battery-details", qos: .utility)
     private var active = false
     private var state: BatteryPowerState?
     private var notBefore: Date?

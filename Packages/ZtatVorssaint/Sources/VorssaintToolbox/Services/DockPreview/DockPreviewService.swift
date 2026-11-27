@@ -99,8 +99,8 @@ final class DockPreviewService: ObservableObject {
 
         let availability = DockPreviewSupport.availability(
             enabled: enabled,
-            hasAccessibility: Permissions.shared.accessibility,
-            hasScreenRecording: Permissions.shared.screenRecording,
+            hasAccessibility: Permissions.shared.checkAccessibilityLive(),
+            hasScreenRecording: Permissions.shared.checkScreenRecordingLive(),
             preferences: cachedPreferences
         )
         blockedReason = availability.blockedReason

@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Ventilátor segítő törlése";
 "Approve in System Settings ▸ Login Items" = "Hagyja jóvá a Rendszerbeállítások ▸ Bejelentkezési elemek"; // gemma4:31b
 "Fan helper needs your approval" = "A ventilátor-segédprogramnak szükség van az Ön jóváhagyására"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "A ventilátorok vezérléséhez engedélyezze a Stats-t a Rendszerbeállítások ▸ Bejelentkezési elemekben."; // gemma4:31b
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "A ventilátorok vezérléséhez engedélyezze a ztat-t a Rendszerbeállítások ▸ Bejelentkezési elemekben."; // gemma4:31b
 "Open Login Items" = "Nyisd meg a bejelentkezési elemeket"; // gemma4:31b
 "Could not enable the fan helper" = "Nem sikerült aktiválni a ventilátor segédprogramot"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Nyissa meg a Rendszerbeállítások ▸ Bejelentkezési elemek menüt, győződjön meg róla, hogy a Stats engedélyezve van a háttérben, majd próbálja újra."; // gemma4:31b
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Nyissa meg a Rendszerbeállítások ▸ Bejelentkezési elemek menüt, győződjön meg róla, hogy a ztat engedélyezve van a háttérben, majd próbálja újra."; // gemma4:31b
 "Fan value" = "Ventilátor érték";
 "Turn off fan" = "Ventilátor kikapcsolása";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "A ventilátor ki lesz kapcsolva. Ez a művelet károsíthatja a macjét, ezért nem ajánlott. Biztosan ki akarja kapcsolni a ventilátort?";

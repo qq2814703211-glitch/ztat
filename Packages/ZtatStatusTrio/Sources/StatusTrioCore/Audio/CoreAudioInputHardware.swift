@@ -330,7 +330,7 @@ private final class CoreAudioInputObservation: AudioInputObservation, @unchecked
   private let listenerClient: any AudioInputPropertyListenerClient
   private let notify: @Sendable (AudioInputEvent) -> Void
   private let listenerQueue = DispatchQueue(
-    label: "com.status-trio.audio-input-hal-listeners",
+    label: "dev.ztat.status.audio-input-hal-listeners",
     qos: .utility
   )
   private let stateLock = NSLock()

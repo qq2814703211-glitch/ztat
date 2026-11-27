@@ -4,7 +4,7 @@ import Foundation
 import os
 
 private let volumeMonitorLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "VolumeMonitor"
 )
 

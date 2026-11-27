@@ -4,7 +4,7 @@ import IOKit
 import os
 
 let ddcTargetLogger = Logger(
-    subsystem: "com.lingsmbp.StatusTrio",
+    subsystem: "dev.ztat.app",
     category: "DDCTarget"
 )
 

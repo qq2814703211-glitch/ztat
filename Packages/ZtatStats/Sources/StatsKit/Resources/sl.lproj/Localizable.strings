@@ -411,10 +411,10 @@
 "Uninstall fan helper" = "Odstrani pomočnika za ventilatorje";
 "Approve in System Settings ▸ Login Items" = "Odobrite v Sistemskih nastavitvah ▸ Elementi ob prijavi";
 "Fan helper needs your approval" = "Pomočnik za ventilator potrebuje vašo odobritev"; // gemma4:31b
-"To control the fans, enable Stats in System Settings ▸ Login Items." = "Za upravljanje ventilatorjev omogočite Stats v Sistemskih nastavitvah ▸ Elementi ob prijavi.";
+"To control the fans, enable Stats in System Settings ▸ Login Items." = "Za upravljanje ventilatorjev omogočite ztat v Sistemskih nastavitvah ▸ Elementi ob prijavi.";
 "Open Login Items" = "Odpri elemente ob prijavi"; // gemma4:31b
 "Could not enable the fan helper" = "Ni bilo mogoče omogočiti pomočnika za ventilator"; // gemma4:31b
-"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Odprite Sistemske nastavitve ▸ Elementi ob prijavi, preverite, ali ima Stats dovoljenje za delovanje v ozadju, nato poskusite znova.";
+"Open System Settings ▸ Login Items, make sure Stats is allowed in the background, then try again." = "Odprite Sistemske nastavitve ▸ Elementi ob prijavi, preverite, ali ima ztat dovoljenje za delovanje v ozadju, nato poskusite znova.";
 "Fan value" = "Vrednost ventilatorja";
 "Turn off fan" = "Izklopi ventilator";
 "You are going to turn off the fan. This is not recommended action that can damage your mac, are you sure you want to do that?" = "Izklopili boste ventilator. To ni priporočljivo dejanje, saj lahko poškoduje vaš računalnik. Ali ste prepričani, da želite to storiti?";

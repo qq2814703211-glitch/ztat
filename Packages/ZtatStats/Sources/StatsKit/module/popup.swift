@@ -239,6 +239,10 @@ internal class PopupView: NSView {
     private let header: HeaderView
     private let body: NSScrollView
     
+    private var isCombined: Bool { self.header.module == .combined }
+    private var headerHeight: CGFloat { isCombined ? 0 : Constants.Popup.headerHeight }
+    private var margins: CGFloat { isCombined ? 0 : Constants.Popup.margins }
+    
     override var intrinsicContentSize: CGSize {
         return CGSize(width: self.frame.width, height: self.frame.height)
     }
@@ -246,17 +250,21 @@ internal class PopupView: NSView {
     private var containerHeight: CGFloat?
     
     init(frame: NSRect, module: ModuleType) {
+        let isCombined = module == .combined
+        let headerH: CGFloat = isCombined ? 0 : Constants.Popup.headerHeight
+        let margin: CGFloat = isCombined ? 0 : Constants.Popup.margins
         self.header = HeaderView(frame: NSRect(
             x: 0,
-            y: frame.height - Constants.Popup.headerHeight,
+            y: frame.height - headerH,
             width: frame.width,
-            height: Constants.Popup.headerHeight
+            height: headerH
         ), module: module)
+        self.header.isHidden = isCombined
         self.body = NSScrollView(frame: NSRect(
-            x: Constants.Popup.margins,
-            y: Constants.Popup.margins,
-            width: frame.width - Constants.Popup.margins*2,
-            height: frame.height - self.header.frame.height - Constants.Popup.margins*2
+            x: margin,
+            y: margin,
+            width: frame.width - margin*2,
+            height: frame.height - headerH - margin*2
         ))
         self.windowHeight = NSScreen.main?.visibleFrame.height
         self.containerHeight = self.body.documentView?.frame.height
@@ -298,11 +306,12 @@ internal class PopupView: NSView {
     
     fileprivate func setView(_ view: Popup_p?) {
         self.view = view
+        self.header.isHidden = self.isCombined
         
         var isScrollVisible: Bool = false
         var size: NSSize = NSSize(
-            width: (view?.frame.width ?? Constants.Popup.width) + (Constants.Popup.margins*2),
-            height: (view?.frame.height ?? 0) + Constants.Popup.headerHeight + (Constants.Popup.margins*2)
+            width: (view?.frame.width ?? Constants.Popup.width) + (self.margins*2),
+            height: (view?.frame.height ?? 0) + self.headerHeight + (self.margins*2)
         )
         
         self.windowHeight = NSScreen.main?.visibleFrame.height // for height recalculate when appear/disappear
@@ -319,7 +328,9 @@ internal class PopupView: NSView {
         self.foreground.setFrameSize(size)
         self.background.setFrameSize(size)
         self.resizeBody(size, scrollVisible: isScrollVisible)
-        self.header.setFrameOrigin(NSPoint(x: 0, y: size.height - Constants.Popup.headerHeight))
+        if !self.isCombined {
+            self.header.setFrameOrigin(NSPoint(x: 0, y: size.height - Constants.Popup.headerHeight))
+        }
         
         if let view = view {
             self.body.documentView = view
@@ -349,7 +360,7 @@ internal class PopupView: NSView {
             }
         }
         
-        if let documentView = self.body.documentView {
+        if !self.isCombined, let documentView = self.body.documentView {
             documentView.scroll(NSPoint(x: 0, y: documentView.bounds.size.height))
         }
     }
@@ -362,8 +373,8 @@ internal class PopupView: NSView {
     private func recalculateHeight(_ size: NSSize) {
         var isScrollVisible: Bool = false
         var windowSize: NSSize = NSSize(
-            width: size.width + (Constants.Popup.margins*2),
-            height: size.height + Constants.Popup.headerHeight + (Constants.Popup.margins*2)
+            width: size.width + (self.margins*2),
+            height: size.height + self.headerHeight + (self.margins*2)
         )
         let h0 = self.containerHeight ?? 0
         
@@ -381,10 +392,12 @@ internal class PopupView: NSView {
         self.foreground.setFrameSize(windowSize)
         self.background.setFrameSize(windowSize)
         self.resizeBody(windowSize, scrollVisible: isScrollVisible)
-        self.header.setFrameOrigin(NSPoint(
-            x: self.header.frame.origin.x,
-            y: self.body.frame.height + (Constants.Popup.margins*2)
-        ))
+        if !self.isCombined {
+            self.header.setFrameOrigin(NSPoint(
+                x: self.header.frame.origin.x,
+                y: self.body.frame.height + (Constants.Popup.margins*2)
+            ))
+        }
         
         if let documentView = self.body.documentView {
             let diff = h0 - (self.body.documentView?.frame.height ?? 0)
@@ -399,10 +412,10 @@ internal class PopupView: NSView {
         let offset: CGFloat = scrollVisible ? 20 : 0
         let isRTL = self.body.userInterfaceLayoutDirection == .rightToLeft
         self.body.frame = NSRect(
-            x: Constants.Popup.margins - (isRTL ? offset : 0),
-            y: Constants.Popup.margins,
-            width: windowSize.width - (Constants.Popup.margins*2) + offset,
-            height: windowSize.height - Constants.Popup.headerHeight - (Constants.Popup.margins*2)
+            x: self.margins - (isRTL ? offset : 0),
+            y: self.margins,
+            width: windowSize.width - (self.margins*2) + offset,
+            height: windowSize.height - self.headerHeight - (self.margins*2)
         )
     }
 }
@@ -415,7 +428,7 @@ internal class HeaderView: NSStackView {
     private var isCloseAction: Bool = false
     private let activityMonitor: URL?
     private let calendar: URL?
-    private var module: ModuleType
+    fileprivate let module: ModuleType
     
     init(frame: NSRect, module: ModuleType) {
         self.module = module

@@ -42,7 +42,7 @@ final class SingleInstanceGuard {
     }
 
     static func lockFileName(for bundleIdentifier: String?) -> String {
-        let fallbackIdentifier = "com.lingsmbp.StatusTrio"
+        let fallbackIdentifier = "dev.ztat.app"
         let identifier = bundleIdentifier?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedIdentifier = identifier.flatMap { $0.isEmpty ? nil : $0 }

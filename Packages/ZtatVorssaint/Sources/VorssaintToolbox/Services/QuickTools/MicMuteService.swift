@@ -5,7 +5,7 @@ import AppKit
 import AudioToolbox
 import CoreAudio
 import Foundation
-import ZtatCore // ZTAT-PATCH: Broadcast mic mute changes via ztatVorssaintMicMuteDidChange.
+import ZtatCore // ZTAT-PATCH: Broadcast mic mute changes via ztatMicMuteDidChange.
 
 /// Applies each available microphone's mute control and drops its input
 /// volume to zero. The mute switch on its own does not zero capture on many
@@ -23,10 +23,10 @@ final class MicMuteService: ObservableObject {
 
     @Published private(set) var isMuted = false {
         didSet {
-            // ZTAT-PATCH: Notify ZtatStatusTrio when mic mute state changes.
+            // ZTAT-PATCH: Notify host when mic mute state changes.
             guard isMuted != oldValue else { return }
             NotificationCenter.default.post(
-                name: .ztatVorssaintMicMuteDidChange,
+                name: .ztatMicMuteDidChange,
                 object: nil,
                 userInfo: ["isMuted": isMuted]
             )
@@ -78,7 +78,7 @@ final class MicMuteService: ObservableObject {
     /// and that is exactly the moment the listeners fire. Sweeping every
     /// device on the main thread would hand the app one hang per reconnection,
     /// so all of it happens here, one sweep at a time.
-    private let halQueue = DispatchQueue(label: "com.vorssaint.utils.micmute.hal", qos: .userInitiated)
+    private let halQueue = DispatchQueue(label: "dev.ztat.toolbox.utils.micmute.hal", qos: .userInitiated)
     /// A sweep that finished after a newer one started must not publish what
     /// it saw.
     private var applyGeneration = 0

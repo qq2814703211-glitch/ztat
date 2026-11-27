@@ -5,7 +5,7 @@ struct TelemetryEligibilityContext: Sendable {
 }
 
 enum TelemetryEligibility {
-    static let productionBundleIdentifier = "com.lingsmbp.StatusTrio"
+    static let productionBundleIdentifier = "dev.ztat.app"
 
     static func isEligible(_ context: TelemetryEligibilityContext) -> Bool {
         context.bundleIdentifier == productionBundleIdentifier

@@ -3,6 +3,7 @@
 
 import AppKit
 import ServiceManagement
+import ZtatCore
 
 /// Clears the app's own footprint on the system, for a clean uninstall.
 ///
@@ -13,7 +14,7 @@ import ServiceManagement
 /// bundle id; and the only thing deleted is the app's own bundle, which is moved
 /// to the Trash (reversible). Nothing leaves the machine.
 enum SelfUninstall {
-    private static var bundleID: String { Bundle.main.bundleIdentifier ?? "com.vorssaint.utils" }
+    private static var bundleID: String { ZtatBrand.activeBundleIdentifier }
 
     /// Resets every TCC permission the app holds, drops the login item and the
     /// optional closed-lid sudoers rule, and leaves the app in place. Calls back
@@ -22,21 +23,13 @@ enum SelfUninstall {
     static func clearPermissions(completion: @escaping (Bool) -> Void) {
         func stop(sleepRestored: Bool = false) {
             DispatchQueue.main.async {
-                if sleepRestored { KeepAwakeManager.shared.resumeAfterSystemTeardown() }
                 Permissions.shared.refresh()
-                FeatureRuntime.shared.sync(AppFeature.allCases)
+                FeatureRuntime.shared.sync(AppFeature.ztatSupportedCases)
                 BrightnessService.shared.resumeInputTaps()
                 completion(false)
             }
         }
-        // Stop every input interceptor FIRST (on the main thread), then revoke.
-        // Revoking Accessibility while a tap is live makes the tap callback hang
-        // on an AX call and freezes the whole machine's input — see the note on
-        // `suspendInputInterceptors`.
         DispatchQueue.main.async {
-            // Mouse acceleration keeps its recovery journal and guard here.
-            // Only a full uninstall deletes that journal, so only it must wait
-            // for a disconnected device to be restored.
             _ = suspendInputInterceptors()
             DispatchQueue.global(qos: .userInitiated).async {
                 guard restoreSleepBeforeRemoval() else { stop(); return }
@@ -47,15 +40,9 @@ enum SelfUninstall {
                 removeSudoersRuleIfPresent { ruleRemoved in    // may show one admin prompt
                     let reset = resetTCC()
                     DispatchQueue.main.async {
-                        // The published permissions still say granted. Read the
-                        // reset state now, or a grant made before the next poll
-                        // looks unchanged and the suspended taps never resume.
                         Permissions.shared.refresh()
-                        // Sleep was restored directly, so the closed-lid session
-                        // state is stale whether or not the reset finished.
-                        KeepAwakeManager.shared.resumeAfterSystemTeardown()
                         if !ruleRemoved || !reset {
-                            FeatureRuntime.shared.sync(AppFeature.allCases)
+                            FeatureRuntime.shared.sync(AppFeature.ztatSupportedCases)
                         }
                         BrightnessService.shared.resumeInputTaps()
                         completion(ruleRemoved && reset)
@@ -66,16 +53,13 @@ enum SelfUninstall {
     }
 
     /// Clears permissions, removes preferences and saved state, sends the app
-    /// bundle to the Trash and quits. Used by "Uninstall Vorssaint completely".
+    /// bundle to the Trash and quits. Used by "Uninstall ztat completely".
     /// A failure passes the message explaining what stopped it.
     static func uninstallCompletely(onFailure: @escaping (String) -> Void) {
-        // A failed reset may have changed some grants. Recheck them before
-        // rearming services in the app that remains installed.
         func stop(_ body: String, sleepRestored: Bool = false) {
             DispatchQueue.main.async {
-                if sleepRestored { KeepAwakeManager.shared.resumeAfterSystemTeardown() }
                 Permissions.shared.refresh()
-                FeatureRuntime.shared.sync(AppFeature.allCases)
+                FeatureRuntime.shared.sync(AppFeature.ztatSupportedCases)
                 BrightnessService.shared.resumeInputTaps()
                 onFailure(body)
             }
@@ -237,13 +221,23 @@ enum SelfUninstall {
     }
 
     private static func removeSudoersRuleIfPresent(then: @escaping (Bool) -> Void) {
-        guard Sudoers.ruleFilesPresent || Sudoers.isConfigured() else { then(true); return }
-        Sudoers.remove(completion: then)            // shows the admin password prompt
+        let ztatRule = "/etc/sudoers.d/ztat-powerguard"
+        let hasZtatRule = FileManager.default.fileExists(atPath: ztatRule)
+        let hasLegacy = Sudoers.ruleFilesPresent || Sudoers.isConfigured()
+        guard hasZtatRule || hasLegacy else { then(true); return }
+        if hasZtatRule {
+            let ok = AdminShell.runSync("/bin/rm -f '\(ztatRule)'", prompt: L10n.shared.s.adminPromptSudoersRemove)
+            if !ok { then(false); return }
+        }
+        if hasLegacy {
+            Sudoers.remove(completion: then)
+        } else {
+            then(true)
+        }
     }
 
     /// `tccutil reset All <bundle id>` clears Accessibility, Screen Recording,
-    /// Full Disk Access, Automation and the rest, for this app only. The bundle
-    /// id is a constant, so there is nothing to inject.
+    /// Full Disk Access, Automation and the rest, for this app only.
     @discardableResult
     private static func resetTCC() -> Bool {
         Shell.run("/usr/bin/tccutil", ["reset", "All", bundleID]).status == 0
@@ -252,14 +246,18 @@ enum SelfUninstall {
     private static func removePreferences() {
         let id = bundleID
         UserDefaults.standard.removePersistentDomain(forName: id)
+        UserDefaults(suiteName: ZtatBrand.statsDefaultsSuite)?.removePersistentDomain(forName: ZtatBrand.statsDefaultsSuite)
+        UserDefaults(suiteName: ZtatBrand.powerGuardDefaultsSuite)?.removePersistentDomain(forName: ZtatBrand.powerGuardDefaultsSuite)
+        UserDefaults(suiteName: ZtatBrand.islandDefaultsSuite)?.removePersistentDomain(forName: ZtatBrand.islandDefaultsSuite)
         let home = NSHomeDirectory()
         try? FileManager.default.removeItem(atPath: "\(home)/Library/Preferences/\(id).plist")
+        try? FileManager.default.removeItem(atPath: "\(home)/Library/Preferences/\(ZtatBrand.statsDefaultsSuite).plist")
+        try? FileManager.default.removeItem(atPath: "\(home)/Library/Preferences/\(ZtatBrand.powerGuardDefaultsSuite).plist")
+        try? FileManager.default.removeItem(atPath: "\(home)/Library/Preferences/\(ZtatBrand.islandDefaultsSuite).plist")
         try? FileManager.default.removeItem(atPath: "\(home)/Library/Saved Application State/\(id).savedState")
-        // Clipboard images and any other app-owned data live here.
         try? FileManager.default.removeItem(atPath: "\(home)/Library/Application Support/\(id)")
+        try? FileManager.default.removeItem(at: ZtatBrand.appSupportDirectory)
         try? FileManager.default.removeItem(atPath: "\(home)/Library/Caches/\(id)")
-        // URLSession writes these on our behalf whenever the app talks to the
-        // network, so they exist without the app ever choosing the path.
         try? FileManager.default.removeItem(atPath: "\(home)/Library/HTTPStorages/\(id)")
         try? FileManager.default.removeItem(
             atPath: "\(home)/Library/HTTPStorages/\(id).binarycookies")
@@ -296,7 +294,7 @@ enum SelfUninstall {
         /bin/rm -f "$0"
         """
         let scriptURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("vorssaint-uninstall-\(pid)-\(UUID().uuidString).sh")
+            .appendingPathComponent("ztat-uninstall-\(pid)-\(UUID().uuidString).sh")
         do {
             try script.write(to: scriptURL, atomically: true, encoding: .utf8)
             // Its own session: the script's first act is to wait for this app

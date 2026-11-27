@@ -128,53 +128,7 @@ struct BluetoothSectionView: View {
             SettingsHintRow(
                 text: localization.string(.settingsAppleBluetoothReadHelp)
             )
-
-            SettingsDivider()
-
-            SettingsHintRow(text: localization.string(.settingsAppleTrustHelp))
-
-            SettingsDivider()
-
-            SettingsToggleRow(
-                symbol: "arrow.clockwise.circle",
-                tint: .green,
-                title: localization.string(.settingsAppleBackgroundRefresh),
-                subtitle: localization.string(.settingsAppleBackgroundRefreshDescription),
-                isOn: $store.refreshesAppleBatteriesInBackground
-            )
-
-            if store.refreshesAppleBatteriesInBackground {
-                SettingsDivider()
-
-                SettingsRow(
-                    "clock",
-                    tint: .teal,
-                    title: localization.string(.settingsAppleBackgroundRefreshInterval)
-                ) {
-                    HStack(spacing: 8) {
-                        Text(localization.format(
-                            .settingsAppleBackgroundRefreshIntervalValue,
-                            store.appleBatteryRefreshIntervalMinutes
-                        ))
-                        .monospacedDigit()
-                        .font(.system(size: 13, design: .monospaced))
-                        .foregroundStyle(.secondary)
-
-                        Stepper(
-                            "",
-                            value: $store.appleBatteryRefreshIntervalMinutes,
-                            in: SettingsStore.appleBatteryRefreshIntervalMinutesRange
-                        )
-                        .labelsHidden()
-                        .fixedSize()
-                        .accessibilityLabel(localization.string(.settingsAppleBackgroundRefreshInterval))
-                        .accessibilityValue(localization.format(
-                            .settingsAppleBackgroundRefreshIntervalValue,
-                            store.appleBatteryRefreshIntervalMinutes
-                        ))
-                    }
-                }
-            }
+            // ZTAT-PATCH: Omit USB/Finder libimobiledevice helper trust instructions (passive BLE only in ztat).
         }
     }
 
