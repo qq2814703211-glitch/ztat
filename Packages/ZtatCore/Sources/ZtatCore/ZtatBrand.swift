@@ -13,7 +13,7 @@ public enum ZtatBrand {
     public static let powerGuardDefaultsPrefix = "ztat.powerGuard."
     public static let islandDefaultsSuite = "dev.ztat.app.island"
     public static let cleanerDefaultsSuite = "dev.ztat.app.cleaner"
-    public static let version = "1.0.0"
+    public static let version = "1.1.0"
     public static let buildNumber = "1"
     public static let hubPanelWidth: CGFloat = 356
 

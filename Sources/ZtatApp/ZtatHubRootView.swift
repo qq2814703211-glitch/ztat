@@ -136,6 +136,9 @@ struct ZtatHubRootView: View {
                 Button(ZtatL10n.tr("应用卸载与深度清理…", "App Uninstaller & Cleaner…")) {
                     onOpenSettings(.cleaner(sectionID: "apps"))
                 }
+                Button(ZtatL10n.tr("系统数据透视…", "System Data Inspector…")) {
+                    onOpenSettings(.cleaner(sectionID: "systemData"))
+                }
                 Divider()
                 Button(islandHost.isEnabled
                        ? ZtatL10n.tr("展开/收起灵动岛", "Toggle Dynamic Island")

@@ -381,13 +381,13 @@ struct ZtatIslandTests {
 
 @Suite("ZtatCleaner Native App Uninstaller & Deep Cleaner")
 struct ZtatCleanerTests {
-    @Test("ZtatCleaner exposes all 10 unified settings sections cleanly")
+    @Test("ZtatCleaner exposes all 11 unified settings sections cleanly")
     @MainActor
     func unifiedCleanerSections() {
         let items = ZtatCleanerHost.shared.settingsSectionItems()
         let ids = items.map(\.id)
         let expected = [
-            "apps", "orphans", "lipo", "developer", "packages",
+            "apps", "systemData", "orphans", "lipo", "developer", "packages",
             "plugins", "services", "fileSearch", "history", "settings"
         ]
         #expect(ids == expected)
@@ -520,5 +520,61 @@ struct ZtatCleanerTests {
             URL(fileURLWithPath: "/tmp/sibling")
         ])
         #expect(collapsed.map(\.path) == ["/tmp/parent", "/tmp/sibling"])
+    }
+
+    @Test("System Data Unpacked section, SpacePlan priority, snapshot validator, and history store work")
+    @MainActor
+    func systemDataUnpackedContracts() throws {
+        #expect(CleanerSectionID.allCases.contains(.systemData))
+        #expect(ZtatCleanerHost.normalizeSectionID("systemData") == "systemData")
+
+        // Snapshot date-stamp strict validation
+        #expect(SystemDataProbes.isValidSnapshotStamp("2026-11-28-153000"))
+        #expect(!SystemDataProbes.isValidSnapshotStamp("2026-11-28; rm -rf /"))
+        #expect(!SystemDataProbes.isValidSnapshotStamp("../bad"))
+
+        // Ollama tag strict validation & system diagnostic dir guard
+        #expect(SystemDataProbes.isValidOllamaTag("llama3:latest"))
+        #expect(SystemDataProbes.isValidOllamaTag("myuser/qwen2.5:7b-instruct"))
+        #expect(!SystemDataProbes.isValidOllamaTag("--help:latest"))
+        #expect(!SystemDataProbes.isValidOllamaTag("bad tag:latest"))
+        #expect(SafePathGuard.rejectionReason(for: URL(fileURLWithPath: "/Library/Logs/DiagnosticReports")) != nil)
+
+        // Human byte parser for Docker CLI output
+        #expect(SystemDataProbes.parseHumanBytes("2.5GB") == 2_500_000_000)
+        #expect(SystemDataProbes.parseHumanBytes("512MB") == 512_000_000)
+
+        // SpacePlanBuilder prioritizes safe (largest first) -> review (oldest idle first), skips manual, trims overshoot
+        let oldDate = Date(timeIntervalSinceNow: -90 * 86_400)
+        let recentDate = Date(timeIntervalSinceNow: -2 * 86_400)
+        let items: [SystemDataItem] = [
+            SystemDataItem(id: "safe.big", category: .xcode, title: "Derived", subtitle: "", bytes: 6_000_000_000, safety: .safe, recovery: .rebuildsLocally, action: .trashPaths([URL(fileURLWithPath: "/tmp/a")])),
+            SystemDataItem(id: "safe.small", category: .logs, title: "Logs", subtitle: "", bytes: 2_000_000_000, safety: .safe, recovery: .disposable, action: .trashPaths([URL(fileURLWithPath: "/tmp/b")])),
+            SystemDataItem(id: "review.old", category: .aiModels, title: "Old Model", subtitle: "", bytes: 5_000_000_000, lastModified: oldDate, safety: .review, recovery: .redownloads, action: .trashPaths([URL(fileURLWithPath: "/tmp/c")])),
+            SystemDataItem(id: "review.new", category: .aiModels, title: "New Model", subtitle: "", bytes: 9_000_000_000, lastModified: recentDate, safety: .review, recovery: .redownloads, action: .trashPaths([URL(fileURLWithPath: "/tmp/d")])),
+            SystemDataItem(id: "manual.vm", category: .systemReserved, title: "VM", subtitle: "", bytes: 20_000_000_000, safety: .manual, recovery: .disposable, action: .manual(guidance: "System"))
+        ]
+        let plan = SpacePlanBuilder.build(items: items, targetBytes: 10_000_000_000)
+        #expect(plan.reachedTarget)
+        #expect(plan.selectedIDs.contains("safe.big"))
+        #expect(plan.selectedIDs.contains("review.old"))
+        #expect(!plan.selectedIDs.contains("manual.vm"))
+        #expect(!plan.selectedIDs.contains("review.new"))
+        // Overshoot trimming: safe.big (6G) + review.old (5G) = 11G >= 10G, so safe.small (2G) should be trimmed
+        #expect(!plan.selectedIDs.contains("safe.small"))
+
+        // History store returned-item detection
+        let tmpHistory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ztat-sysdata-test-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: tmpHistory) }
+        let store = SystemDataHistoryStore(fileURL: tmpHistory)
+        store.recordDeletions([
+            SystemDataDeletionRecord(itemID: "safe.big", title: "Derived", path: "/tmp/a", bytesFreed: 4_000_000_000)
+        ])
+        let returned = store.detectReturnedItems(currentItems: [
+            SystemDataItem(id: "safe.big", category: .xcode, title: "Derived", subtitle: "", path: URL(fileURLWithPath: "/tmp/a"), bytes: 500_000_000, safety: .safe, recovery: .rebuildsLocally, action: .trashPaths([URL(fileURLWithPath: "/tmp/a")]))
+        ])
+        #expect(returned.count == 1)
+        #expect(returned.first?.currentBytes == 500_000_000)
     }
 }

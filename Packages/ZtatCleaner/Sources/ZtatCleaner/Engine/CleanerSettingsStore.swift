@@ -31,6 +31,10 @@ public final class CleanerSettingsStore: ObservableObject {
         static let preferCategorizedFiles = "preferCategorizedFiles"
         static let preferGridAppList = "preferGridAppList"
         static let consoleOpen = "consoleOpen"
+        static let sysDataScanExternalVolumes = "sysDataScanExternalVolumes"
+        static let sysDataRequireAuth = "sysDataRequireAuth"
+        static let sysDataHistoryEnabled = "sysDataHistoryEnabled"
+        static let sysDataHiddenIDs = "sysDataHiddenIDs"
     }
 
     public static var defaultAppScanFolders: [String] {
@@ -131,6 +135,22 @@ public final class CleanerSettingsStore: ObservableObject {
         didSet { defaults.set(isConsoleOpen, forKey: Keys.consoleOpen) }
     }
 
+    @Published public var sysDataScanExternalVolumes: Bool {
+        didSet { defaults.set(sysDataScanExternalVolumes, forKey: Keys.sysDataScanExternalVolumes) }
+    }
+
+    @Published public var sysDataRequireAuth: Bool {
+        didSet { defaults.set(sysDataRequireAuth, forKey: Keys.sysDataRequireAuth) }
+    }
+
+    @Published public var sysDataHistoryEnabled: Bool {
+        didSet { defaults.set(sysDataHistoryEnabled, forKey: Keys.sysDataHistoryEnabled) }
+    }
+
+    @Published public var sysDataHiddenIDs: Set<String> {
+        didSet { defaults.set(Array(sysDataHiddenIDs).sorted(), forKey: Keys.sysDataHiddenIDs) }
+    }
+
     public init(suiteName: String = ZtatBrand.cleanerDefaultsSuite) {
         let store = UserDefaults(suiteName: suiteName) ?? .standard
         self.defaults = store
@@ -180,6 +200,10 @@ public final class CleanerSettingsStore: ObservableObject {
         self.preferCategorizedFiles = store.object(forKey: Keys.preferCategorizedFiles) as? Bool ?? true
         self.preferGridAppList = store.bool(forKey: Keys.preferGridAppList)
         self.isConsoleOpen = store.bool(forKey: Keys.consoleOpen)
+        self.sysDataScanExternalVolumes = store.bool(forKey: Keys.sysDataScanExternalVolumes)
+        self.sysDataRequireAuth = store.bool(forKey: Keys.sysDataRequireAuth)
+        self.sysDataHistoryEnabled = store.object(forKey: Keys.sysDataHistoryEnabled) as? Bool ?? true
+        self.sysDataHiddenIDs = Set(store.stringArray(forKey: Keys.sysDataHiddenIDs) ?? [])
     }
 
     public nonisolated static func normalizeLanguageCode(_ raw: String) -> String {
@@ -285,5 +309,9 @@ public final class CleanerSettingsStore: ObservableObject {
         lipoTotalSavedBytes = 0
         preferCategorizedFiles = true
         preferGridAppList = false
+        sysDataScanExternalVolumes = false
+        sysDataRequireAuth = false
+        sysDataHistoryEnabled = true
+        sysDataHiddenIDs = []
     }
 }

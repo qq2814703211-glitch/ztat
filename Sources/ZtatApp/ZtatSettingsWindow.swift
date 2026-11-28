@@ -105,6 +105,7 @@ final class ZtatSettingsWindowController: NSObject, NSWindowDelegate {
         VitalsDashboardModel.shared.endConsumer("taskmanager.settings.embedded")
         ZtatStatsHost.shared.setEmbeddedSettingsTarget(nil)
         ZtatStatusTrioHost.shared.setSettingsVisible(false)
+        ZtatCleanerHost.shared.systemDataController.cancelScan()
     }
 
     func windowDidMiniaturize(_ notification: Notification) {

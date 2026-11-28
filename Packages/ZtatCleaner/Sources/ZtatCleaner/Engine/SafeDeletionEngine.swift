@@ -37,6 +37,7 @@ public enum SafePathGuard {
         "/Library/LaunchAgents",
         "/Library/LaunchDaemons",
         "/Library/Logs",
+        "/Library/Logs/DiagnosticReports",
         "/Library/PreferencePanes",
         "/Library/Preferences",
         "/Library/PrivilegedHelperTools",

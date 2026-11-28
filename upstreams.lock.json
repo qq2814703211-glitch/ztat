@@ -166,6 +166,22 @@
         "Clean-room GPL-3.0-or-later implementation in Packages/ZtatCleaner covering Deep App Uninstaller (List/Grid, 13 categories, 3-tier sensitivity, 1-click Reset App, wrapped iOS/Web/Steam/Brew/MAS badges, TCC viewer, export & ditto archive), Orphaned/Zombie Files (22 paths + Exclude/Link-to-App), Pure-Swift Mach-O 32/64-bit App Lipo & .lproj Language Pruner, 26-toolchain Developer Cleaner + IDE Orphan Workspaces + Pip Manager, Public-API PKG/Receipts Inspector, 18-category Plugins Manager, Launch Services Manager, 7-filter File Search, Reversible Trash-Bundle Delete History, and opt-in zero-idle in-process Trash Sentinel",
         "Isolated UserDefaults suite dev.ztat.app.cleaner, hard-protected system roots / ztat bundle / Git source repositories, native Finder Services ('Uninstall with ztat') & ztat:// URL scheme, replacing Vorssaint's basic .uninstaller"
       ]
+    },
+    "macos-sysdata": {
+      "url": "https://github.com/Jarvis322/macos-sysdata.git",
+      "branch": "main",
+      "commit": "63fb10a2c3357988f5864e0418db8b7d60d6398b",
+      "describe": "v1.13.3",
+      "license": "Proprietary Source-Available (All Rights Reserved — CLEAN-ROOM REIMPLEMENTATION ONLY)",
+      "integrationMode": "clean-room-feature-reference",
+      "targetPath": "Packages/ZtatCleaner",
+      "excludedComponents": [
+        "ZERO source files, probe tables, localization strings, or assets copied from Jarvis322/macos-sysdata due to proprietary license",
+        "Excluded standalone menu bar icon, separate window, Sparkle/GitHub updater, background polling timers, and standalone widgets"
+      ],
+      "ztatPatches": [
+        "Clean-room GPL-3.0-or-later System Data Unpacked module natively embedded in ZtatCleaner (.systemData) with 16 categories, claim-aware large-folder discovery, bounded-concurrency hard-link-deduplicated disk walker with stall watchdog, APFS local snapshots (tmutil), Simulators/Xcode, Package Managers, Ollama unique-layer & Hugging Face AI models, Docker df, VMs, iOS backups, repo-grouped Project Footprints, target-driven Space Plan, APFS transparent compression (ditto --hfsCompression), Touch ID confirmation, local scan trend & returned-cache history, and strict zero-idle lifecycle"
+      ]
     }
   }
 }

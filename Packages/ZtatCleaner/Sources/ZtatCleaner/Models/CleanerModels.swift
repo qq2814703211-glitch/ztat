@@ -24,6 +24,7 @@ public struct ZtatCleanerSectionItem: Identifiable, Hashable, Sendable {
 
 public enum CleanerSectionID: String, CaseIterable, Identifiable, Sendable {
     case apps
+    case systemData
     case orphans
     case lipo
     case developer
@@ -39,6 +40,7 @@ public enum CleanerSectionID: String, CaseIterable, Identifiable, Sendable {
     public var title: String {
         switch self {
         case .apps: return ZtatL10n.tr("应用卸载", "App Uninstaller")
+        case .systemData: return ZtatL10n.tr("系统数据透视", "System Data")
         case .orphans: return ZtatL10n.tr("孤立残留", "Orphaned Files")
         case .lipo: return ZtatL10n.tr("架构瘦身", "App Lipo & Languages")
         case .developer: return ZtatL10n.tr("开发环境清理", "Developer Cleaner")
@@ -54,6 +56,7 @@ public enum CleanerSectionID: String, CaseIterable, Identifiable, Sendable {
     public var symbolName: String {
         switch self {
         case .apps: return "trash.square.fill"
+        case .systemData: return "internaldrive.fill"
         case .orphans: return "doc.badge.ellipsis"
         case .lipo: return "scissors"
         case .developer: return "hammer.fill"
@@ -70,6 +73,8 @@ public enum CleanerSectionID: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .apps:
             return "app uninstall delete reset bundle leftover trash 应用 卸载 残留 重置 拖放"
+        case .systemData:
+            return "system data unpacked storage disk space snapshot tmutil simulator docker ai ollama huggingface vm backup project node_modules compression 系统数据 透视 存储 空间 快照 模拟器 项目 压缩"
         case .orphans:
             return "orphan zombie leftover library cleanup 孤立 僵尸 残留 清理"
         case .lipo:

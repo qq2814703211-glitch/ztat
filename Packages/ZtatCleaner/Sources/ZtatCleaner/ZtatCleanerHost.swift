@@ -30,6 +30,8 @@ public final class ZtatCleanerHost: ObservableObject {
     @Published public var statusBanner: String? = nil
     @Published public var statusBannerIsError: Bool = false
 
+    public let systemDataController = SystemDataController()
+
     private var isStarted = false
     private var cancellables = Set<AnyCancellable>()
     private var leftoverScanTask: Task<Void, Never>?
@@ -63,6 +65,7 @@ public final class ZtatCleanerHost: ObservableObject {
         bannerClearTask?.cancel()
         bannerClearTask = nil
         cancellables.removeAll()
+        systemDataController.cancelScan()
         TrashSentinelMonitor.shared.stop()
     }
 
@@ -91,6 +94,8 @@ public final class ZtatCleanerHost: ObservableObject {
         switch section {
         case .apps:
             return AnyView(CleanerAppsUninstallerView(host: self))
+        case .systemData:
+            return AnyView(CleanerSystemDataView(host: self, controller: systemDataController))
         case .orphans:
             return AnyView(CleanerOrphansView(host: self))
         case .lipo:
